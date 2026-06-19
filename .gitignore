@@ -1,0 +1,39 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Runtime/generated project data
+output/
+downloads/
+logs/
+.capcut_tool_jobs/
+draft_studio.db
+draft_studio.db-shm
+draft_studio.db-wal
+config.json
+
+# Bundled/generated tooling
+tools/ffmpeg/
+obfuscated/
+.gitnexus/
+
+# Local editor and OS files
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,38 @@
+{
+    "Mặc định (Default)": {
+        "download_use_archive": true,
+        "download_include_playlists": false,
+        "download_playlist_limit": 20,
+        "download_workers": 2,
+        "download_kind": "video",
+        "bgm_path": "",
+        "logo_path": "",
+        "logo_position": "top_right",
+        "logo_scale": 15.0,
+        "anim_path": "",
+        "anim_position": "bottom_center",
+        "anim_scale": 30.0,
+        "anim_timing": "end",
+        "canvas": "9:16",
+        "clip_min_sec": 5.0,
+        "clip_max_sec": 9.0,
+        "selection_mode": "shuffle_bag",
+        "short_video_mode": "stretch",
+        "recursive_scan": false,
+        "auto_kf_id": "none",
+        "auto_trans_id": "none",
+        "auto_trans_dur_val": 0.4,
+        "subtitle_font_size": 6.0,
+        "subtitle_bold": true,
+        "subtitle_color": [
+            1.0,
+            1.0,
+            1.0
+        ],
+        "subtitle_outline_width": 40.0,
+        "subtitle_shadow_alpha": 0.8,
+        "subtitle_shadow_distance": 5.0,
+        "bg_switch_mode": "time",
+        "bg_switch_group_size": 3.0
+    }
+}

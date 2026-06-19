@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+import os
+import hashlib
+import time
+import threading
+from contextlib import contextmanager
+from pathlib import Path
+from typing import BinaryIO, Iterator
+
+
+DEFAULT_DRAFT_LOCK_TIMEOUT_SEC = 30.0
+
+
+class DraftBusyError(RuntimeError):
+    """Raised when another task is already writing the same draft project."""
+
+
+_registry_lock = threading.Lock()
+_locks: dict[str, threading.RLock] = {}
+_thread_state = threading.local()
+
+
+def draft_lock_key(project_path: str | Path) -> str:
+    path = Path(project_path).expanduser().resolve(strict=False)
+    return os.path.normcase(str(path))
+
+
+def _get_lock(key: str) -> threading.RLock:
+    with _registry_lock:
+        lock = _locks.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _locks[key] = lock
+        return lock
+
+
+def _held_depths() -> dict[str, int]:
+    depths = getattr(_thread_state, "draft_lock_depths", None)
+    if depths is None:
+        depths = {}
+        _thread_state.draft_lock_depths = depths
+    return depths
+
+
+def _lock_file_path(project_path: str | Path, key: str) -> Path:
+    project = Path(project_path).expanduser().resolve(strict=False)
+    lock_dir = project.parent / ".capcut_tool_locks"
+    lock_name = hashlib.sha256(key.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return lock_dir / f"{lock_name}.lock"
+
+
+def _prepare_lock_file(lock_path: Path) -> BinaryIO:
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    handle.seek(0, os.SEEK_END)
+    if handle.tell() == 0:
+        handle.write(b"0")
+        handle.flush()
+        os.fsync(handle.fileno())
+    handle.seek(0)
+    return handle
+
+
+def _try_lock_file(handle: BinaryIO) -> None:
+    handle.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.lockf(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB, 1)
+
+
+def _unlock_file(handle: BinaryIO) -> None:
+    try:
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.lockf(handle.fileno(), fcntl.LOCK_UN, 1)
+    finally:
+        handle.close()
+
+
+def _acquire_file_lock(project_path: str | Path, key: str, timeout_sec: float) -> BinaryIO:
+    project_name = Path(project_path).name or str(project_path)
+    lock_path = _lock_file_path(project_path, key)
+    handle = _prepare_lock_file(lock_path)
+    deadline = time.monotonic() + max(0.0, float(timeout_sec))
+
+    while True:
+        try:
+            _try_lock_file(handle)
+            return handle
+        except OSError:
+            if time.monotonic() >= deadline:
+                handle.close()
+                raise DraftBusyError(
+                    f"Du an CapCut '{project_name}' dang duoc xu ly boi mot cua so/tien trinh khac. "
+                    "Vui long doi tac vu hien tai hoan tat roi thu lai."
+                )
+            time.sleep(0.05)
+
+
+@contextmanager
+def locked_draft(
+    project_path: str | Path,
+    *,
+    timeout_sec: float = DEFAULT_DRAFT_LOCK_TIMEOUT_SEC,
+) -> Iterator[None]:
+    key = draft_lock_key(project_path)
+    lock = _get_lock(key)
+    timeout = max(0.0, float(timeout_sec))
+    deadline = time.monotonic() + timeout
+    acquired = lock.acquire(timeout=timeout)
+    if not acquired:
+        project_name = Path(project_path).name or str(project_path)
+        raise DraftBusyError(
+            f"Du an CapCut '{project_name}' dang duoc xu ly boi tac vu khac. "
+            "Vui long doi tac vu hien tai hoan tat roi thu lai."
+        )
+    depths = _held_depths()
+    reentrant = depths.get(key, 0) > 0
+    file_lock: BinaryIO | None = None
+    registered = False
+    try:
+        if not reentrant:
+            remaining = max(0.0, deadline - time.monotonic())
+            file_lock = _acquire_file_lock(project_path, key, remaining)
+        depths[key] = depths.get(key, 0) + 1
+        registered = True
+        yield
+    finally:
+        if registered:
+            current_depth = depths.get(key, 0)
+            if current_depth <= 1:
+                depths.pop(key, None)
+                if file_lock is not None:
+                    _unlock_file(file_lock)
+                    file_lock = None
+            else:
+                depths[key] = current_depth - 1
+        elif file_lock is not None:
+            _unlock_file(file_lock)
+        lock.release()
