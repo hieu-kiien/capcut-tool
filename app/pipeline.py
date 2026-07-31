@@ -233,7 +233,7 @@ class PipelineRunner:
     ) -> List[str]:
         raise_if_cancelled(cancel_check)
         from app.preflight import run_preflight
-        report = run_preflight(self.config)
+        report = run_preflight(self.config, fast_mode=True)
         raise_if_cancelled(cancel_check)
         for issue in report.issues:
             icon = "[THÔNG TIN]"

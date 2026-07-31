@@ -1,0 +1,99 @@
+{
+  "patch_version": "0.1.0-mvp",
+  "applied_at": "20260731-143409",
+  "backup": "D:\\1. LapTrinh\\capcut tool\\.mvp-backup\\20260731-143409",
+  "changes": [
+    {
+      "path": ".github\\workflows\\mvp-ci.yml",
+      "action": "create"
+    },
+    {
+      "path": ".pytest_cache\\.gitignore",
+      "action": "replace"
+    },
+    {
+      "path": ".pytest_cache\\CACHEDIR.TAG",
+      "action": "replace"
+    },
+    {
+      "path": ".pytest_cache\\README.md",
+      "action": "replace"
+    },
+    {
+      "path": ".pytest_cache\\v\\cache\\nodeids",
+      "action": "replace"
+    },
+    {
+      "path": "build_mvp.ps1",
+      "action": "create"
+    },
+    {
+      "path": "capcut_mvp.spec",
+      "action": "create"
+    },
+    {
+      "path": "docs\\MVP_CHANGELOG.md",
+      "action": "create"
+    },
+    {
+      "path": "docs\\MVP_RELEASE_GUIDE.md",
+      "action": "create"
+    },
+    {
+      "path": "docs\\MVP_RESEARCH_REPORT.md",
+      "action": "create"
+    },
+    {
+      "path": "main.py",
+      "action": "replace"
+    },
+    {
+      "path": "mvp_runtime\\__init__.py",
+      "action": "create"
+    },
+    {
+      "path": "mvp_runtime\\app_paths.py",
+      "action": "create"
+    },
+    {
+      "path": "mvp_runtime\\bootstrap.py",
+      "action": "create"
+    },
+    {
+      "path": "mvp_runtime\\diagnostics.py",
+      "action": "create"
+    },
+    {
+      "path": "mvp_runtime\\logging_setup.py",
+      "action": "create"
+    },
+    {
+      "path": "pytest.ini",
+      "action": "create"
+    },
+    {
+      "path": "requirements-dev.txt",
+      "action": "create"
+    },
+    {
+      "path": "run_mvp.bat",
+      "action": "create"
+    },
+    {
+      "path": "tests\\test_mvp_runtime.py",
+      "action": "create"
+    },
+    {
+      "path": "app/pipeline.py",
+      "action": "fast preflight"
+    },
+    {
+      "path": "app/preflight.py",
+      "action": "accurate fast preflight voice validation"
+    },
+    {
+      "path": "app/preflight.py",
+      "action": "read-only media support"
+    }
+  ]
+}

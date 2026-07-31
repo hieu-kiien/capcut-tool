@@ -154,21 +154,19 @@ def run_preflight(config: Any, fast_mode: bool = False) -> PreflightReport:
                 blocks_run=True
             ))
         else:
-            if fast_mode:
-                voice_ok = True
-                voice_duration_sec = 0.0
+            # Fast mode skips expensive background-library probes only.
+            # The single voice file is still validated so preflight errors stay accurate.
+            voice_asset = media_probe.probe_media(voice_path)
+            if voice_asset.error:
+                issues.append(PreflightIssue(
+                    code="voice",
+                    severity="error",
+                    message=f"Không thể đọc thông tin tệp giọng đọc: {voice_asset.error}",
+                    blocks_run=True
+                ))
             else:
-                voice_asset = media_probe.probe_media(voice_path)
-                if voice_asset.error:
-                    issues.append(PreflightIssue(
-                        code="voice",
-                        severity="error",
-                        message=f"Không thể đọc thông tin tệp giọng đọc: {voice_asset.error}",
-                        blocks_run=True
-                    ))
-                else:
-                    voice_duration_sec = voice_asset.duration_us / 1e6
-                    voice_ok = True
+                voice_duration_sec = voice_asset.duration_us / 1e6
+                voice_ok = True
     else:
         issues.append(PreflightIssue(
             code="voice",
@@ -190,20 +188,10 @@ def run_preflight(config: Any, fast_mode: bool = False) -> PreflightReport:
                 blocks_run=True
             ))
         else:
-            # Check media dir write permission (optional warning, but original did error)
-            try:
-                test_file = media_dir / f".write_test_{int(time.time())}"
-                test_file.write_text("test", encoding="utf-8")
-                test_file.unlink()
-                media_ok = True
-            except Exception as exc:
-                issues.append(PreflightIssue(
-                    code="media",
-                    severity="error",
-                    message=f"Không có quyền ghi vào thư mục video/hình nền: {exc}",
-                    blocks_run=True
-                ))
-
+            # Media is an input source. Requiring write access rejects valid
+            # read-only libraries and creates unnecessary temporary files.
+            # Actual read/list errors are handled by the scan block below.
+            media_ok = True
             # Scan and count media files
             if media_ok:
                 extensions = media_probe.SUPPORTED_VISUAL_EXTENSIONS

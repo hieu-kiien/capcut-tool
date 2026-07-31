@@ -1,0 +1,29 @@
+name: MVP CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-test:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install native tools
+        shell: powershell
+        run: choco install ffmpeg mediainfo -y --no-progress
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Compile
+        run: python -m compileall app core pyJianYingDraft mvp_runtime main.py capcut_draft_creator.py capcut_keyframe_tool.py media_probe.py -q
+      - name: Runtime tests
+        run: python -m pytest -q tests
+      - name: Diagnostics
+        run: python main.py --diagnose-json
