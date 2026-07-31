@@ -242,14 +242,26 @@ def build_ytdlp_command(
 class YtDlpDownloadRunner:
     def __init__(self) -> None:
         self._cancel_event = threading.Event()
-        self._processes: set[subprocess.Popen] = set()
+        self._processes: dict[int, subprocess.Popen] = {}
         self._process_lock = threading.Lock()
+        self._cancelled_indexes: set[int] = set()
 
     def cancel(self) -> None:
         self._cancel_event.set()
         with self._process_lock:
-            processes = list(self._processes)
+            processes = list(self._processes.values())
         for process in processes:
+            try:
+                if process.poll() is None:
+                    _terminate_process(process)
+            except Exception:
+                pass
+
+    def cancel_item(self, index: int) -> None:
+        with self._process_lock:
+            self._cancelled_indexes.add(index)
+            process = self._processes.get(index)
+        if process:
             try:
                 if process.poll() is None:
                     _terminate_process(process)
@@ -369,8 +381,9 @@ class YtDlpDownloadRunner:
                         succeeded += 1
                         results[idx].status = "completed"
                     else:
-                        failed += 1
-                        results[idx].status = "failed"
+                        if results[idx].status != "cancelled":
+                            failed += 1
+                            results[idx].status = "failed"
                 except DownloadCancelled:
                     self.cancel()
                     for i, res in enumerate(results):
@@ -424,7 +437,7 @@ class YtDlpDownloadRunner:
             creationflags=creationflags,
         )
         with self._process_lock:
-            self._processes.add(process)
+            self._processes[index] = process
         
         last_percent = "0%"
         output_path = ""
@@ -435,6 +448,15 @@ class YtDlpDownloadRunner:
                     if item_progress:
                         item_progress(index, "cancelled", "Đã hủy", output_path, "")
                     raise DownloadCancelled("Đã hủy tải media.")
+                if index in self._cancelled_indexes:
+                    try:
+                        if process.poll() is None:
+                            _terminate_process(process)
+                    except Exception:
+                        pass
+                    if item_progress:
+                        item_progress(index, "cancelled", "Đã hủy", output_path, "")
+                    return False
                 text = line.strip()
                 if text:
                     _emit(progress, f"{prefix} {text}")
@@ -449,11 +471,13 @@ class YtDlpDownloadRunner:
             return_code = _safe_wait(process)
         finally:
             with self._process_lock:
-                self._processes.discard(process)
+                self._processes.pop(index, None)
 
-        if self._cancel_event.is_set():
+        if self._cancel_event.is_set() or index in self._cancelled_indexes:
             if item_progress:
                 item_progress(index, "cancelled", "Đã hủy", output_path, "")
+            if index in self._cancelled_indexes:
+                return False
             raise DownloadCancelled("Đã hủy tải media.")
         if return_code != 0:
             _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}.")
@@ -505,7 +529,7 @@ class YtDlpDownloadRunner:
             creationflags=creationflags,
         )
         with self._process_lock:
-            self._processes.add(process)
+            self._processes[index] = process
         
         output_path = ""
         try:
@@ -515,6 +539,15 @@ class YtDlpDownloadRunner:
                     if item_progress:
                         item_progress(index, "cancelled", "Đã hủy", output_path, "")
                     raise DownloadCancelled("Đã hủy tải media.")
+                if index in self._cancelled_indexes:
+                    try:
+                        if process.poll() is None:
+                            _terminate_process(process)
+                    except Exception:
+                        pass
+                    if item_progress:
+                        item_progress(index, "cancelled", "Đã hủy", output_path, "")
+                    return False
                 text = line.strip()
                 if text:
                     _emit(progress, f"{prefix} {text}")
@@ -526,11 +559,13 @@ class YtDlpDownloadRunner:
             return_code = _safe_wait(process)
         finally:
             with self._process_lock:
-                self._processes.discard(process)
+                self._processes.pop(index, None)
 
-        if self._cancel_event.is_set():
+        if self._cancel_event.is_set() or index in self._cancelled_indexes:
             if item_progress:
                 item_progress(index, "cancelled", "Đã hủy", output_path, "")
+            if index in self._cancelled_indexes:
+                return False
             raise DownloadCancelled("Đã hủy tải media.")
         if return_code != 0:
             _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}.")

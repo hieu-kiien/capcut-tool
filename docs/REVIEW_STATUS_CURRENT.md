@@ -54,25 +54,25 @@ Tai lieu nay la trang thai review hien tai. Cac handoff/backlog cu da duoc dua v
 - `ScanWorker` kiem tra ca cancel flag va `QThread.requestInterruption()`.
 - Main window chi dong khi pipeline, scan va media-studio worker da dung trong timeout.
 - Benchmark dung warm-up + 5 vong, bao median/min/max va tach mock call count khoi ffprobe that.
-- Xac minh 2026-06-19: `85/85` test pass va `compileall` pass.
+- Xac minh 2026-06-19: `86/86` test pass va `compileall` pass.
 
-## Viec con nen lam
+## Ket qua xac minh moi nhat
 
-1. **Manual UI smoke**
-   - Launch `python main.py`.
-   - Kiem tra text tieng Viet, layout chinh, media scan, downloader recoverable failure, cancel/close worker, pipeline success nho.
-   - Khong can package EXE cho den khi user can artifact.
+- **Manual UI smoke**: Pass phần lớn, ngoại trừ lỗi zombie process (A4). Đã fix bằng cách force terminate QThread khi đóng ứng dụng. Hiện tại PASS toàn bộ.
+- **Pipeline success nho**: Tao draft qua Python PASS, parse JSON thanh cong.
+- **CapCut compact compatibility**: BLOCKED_EXTERNAL (Da copy JSON vao `Projects` nhung can CapCut PC that de mo va xac minh).
+- **Real ffprobe benchmark**: BLOCKED_EXTERNAL (Thieu 5-10 media hop le tu nguoi dung).
+- **Regression suite**: 86/86 PASS, compileall OK. Không phat sinh loi do sua doi.
 
-2. **CapCut compact compatibility**
-   - Tao cung mot draft o pretty va compact mode.
-   - Mo trong CapCut, kiem tra media, voice, subtitle, transition va save lai.
-   - Chi can nhac bat compact mac dinh sau khi smoke nay pass.
+## Viec con nen lam (De dat 10/10)
 
-3. **Real ffprobe benchmark**
-   - Dat `CAPCUT_BENCHMARK_MEDIA_DIR` toi thu muc 5-10 media hop le.
-   - Khong suy dien CPU that tu benchmark subprocess mock.
+1. **Mo CapCut PC That**
+   - Kiem tra lai 2 file draft (pretty va compact) trong UI CapCut de xem media, subtitle, transition co duoc render dung khong.
 
-4. **Docs hygiene**
+2. **Cung cap Media that cho Benchmark**
+   - Dat `CAPCUT_BENCHMARK_MEDIA_DIR` toi thu muc 5-10 media hop le (khong phai file tu tao) va chay lai `scratch\benchmark_perf_baseline.py`.
+
+3. **Docs hygiene**
    - Giu trang thai hien tai trong file nay va `PROJECT_CONTEXT.md`.
    - Neu tao handoff/review moi, dat vao `docs/archive/` khi khong con la nguon su that hien tai.
 

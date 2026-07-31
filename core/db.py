@@ -1,11 +1,12 @@
 import sqlite3
 from pathlib import Path
+import threading
 
 # DB file path in the project root
 DB_PATH = Path(__file__).resolve().parents[1] / "draft_studio.db"
 
 class Database:
-    _conn = None
+    _local = threading.local()
 
     @classmethod
     def get_connection(cls, db_path: str | Path = None) -> sqlite3.Connection:
@@ -13,20 +14,23 @@ class Database:
         Gets a connection to the SQLite database.
         Ensures foreign keys are enabled and journal mode is WAL.
         """
-        if cls._conn is None:
+        conn = getattr(cls._local, "conn", None)
+        if conn is None:
             target_path = Path(db_path) if db_path else DB_PATH
             # Ensure parent directories exist
             target_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Connect to database (check_same_thread=False allows multi-thread read/write safety under WAL)
-            cls._conn = sqlite3.connect(str(target_path), check_same_thread=False)
-            cls._conn.row_factory = sqlite3.Row
+            conn = sqlite3.connect(str(target_path), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
             
             # Configure database behavior
-            cls._conn.execute("PRAGMA journal_mode=WAL;")
-            cls._conn.execute("PRAGMA foreign_keys=ON;")
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
             
-        return cls._conn
+            cls._local.conn = conn
+            
+        return conn
 
     @classmethod
     def init_db(cls, db_path: str | Path = None) -> None:
@@ -122,6 +126,7 @@ class Database:
             tags TEXT DEFAULT '',
             category_name TEXT DEFAULT 'overlay',
             md5_hash TEXT DEFAULT '',
+            thumbnail_path TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
         """)
@@ -133,6 +138,8 @@ class Database:
             cursor.execute("ALTER TABLE assets ADD COLUMN category_name TEXT DEFAULT 'overlay';")
         if "md5_hash" not in columns:
             cursor.execute("ALTER TABLE assets ADD COLUMN md5_hash TEXT DEFAULT '';")
+        if "thumbnail_path" not in columns:
+            cursor.execute("ALTER TABLE assets ADD COLUMN thumbnail_path TEXT DEFAULT '';")
 
         # Self-healing migration for profiles table
         cursor.execute("PRAGMA table_info(profiles);")
@@ -231,8 +238,9 @@ class Database:
     @classmethod
     def close_connection(cls) -> None:
         """
-        Closes the active database connection.
+        Closes the active database connection for the current thread.
         """
-        if cls._conn is not None:
-            cls._conn.close()
-            cls._conn = None
+        conn = getattr(cls._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            cls._local.conn = None

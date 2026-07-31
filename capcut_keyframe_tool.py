@@ -4,6 +4,7 @@ import os
 import random
 import shutil
 import subprocess
+import psutil
 import sys
 import uuid
 from datetime import datetime
@@ -11,6 +12,8 @@ from pathlib import Path
 import time
 
 DEFAULT_ROOT = Path(r'C:\Users\Admin\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft')
+
+KEYFRAME_PADDING_OFFSET_US = 300_000  # 0.3 seconds offset from clip boundaries to prevent transition jitter
 
 PROPERTY_MAP = {
     'rotation': 'KFTypeRotation',
@@ -282,12 +285,20 @@ def apply_to_file(path, args):
             if args.mode == 'replace':
                 ck[:] = [x for x in ck if x.get('property_type') not in prop_types]
             dur = segment_duration(seg)
+            padding_us = KEYFRAME_PADDING_OFFSET_US
+            if dur > padding_us * 2:
+                start_k_offset = padding_us
+                end_k_offset = dur - padding_us
+            else:
+                start_k_offset = min(padding_us, int(dur * 0.1)) if dur > 0 else 0
+                end_k_offset = max(dur - padding_us, int(dur * 0.9)) if dur > 0 else dur
+            
             for ptype in prop_types:
                 ck.append({
                     'id': str(uuid.uuid4()).upper(),
                     'keyframe_list': [
-                        make_keyframe(0, args.from_value),
-                        make_keyframe(dur, args.to_value)
+                        make_keyframe(start_k_offset, args.from_value),
+                        make_keyframe(end_k_offset, args.to_value)
                     ],
                     'material_id': '',
                     'property_type': ptype
@@ -340,6 +351,15 @@ def _convert_value_if_needed(op, raw_value, canvas_cfg, seg, property_type):
     return raw_value
 
 def _build_keyframe_list_for_op(op, duration, canvas_cfg, seg, property_type, ops_ctx):
+    # Keyframe Padding Offset (0.3s = 300,000 µs) to prevent transition jitter at boundaries
+    padding_us = KEYFRAME_PADDING_OFFSET_US
+    if duration > padding_us * 2:
+        start_t = padding_us
+        end_t = duration - padding_us
+    else:
+        start_t = 0
+        end_t = duration
+
     kf_def = op.get('keyframes')
     if kf_def:
         out = []
@@ -356,15 +376,20 @@ def _build_keyframe_list_for_op(op, duration, canvas_cfg, seg, property_type, op
                 else:
                     at = float(a)
             at = float(at)
-            t = int(duration * at)
+            if at == 0.0:
+                t = start_t
+            elif at == 1.0:
+                t = end_t
+            else:
+                t = int(duration * at)
             v = _convert_keyframe_item_value(op, item, canvas_cfg, seg, property_type, ops_ctx)
             out.append(make_keyframe(t, v))
         return out
     from_value = _convert_value_if_needed(op, float(op['from']), canvas_cfg, seg, property_type)
     to_value = _convert_value_if_needed(op, float(op['to']), canvas_cfg, seg, property_type)
     return [
-        make_keyframe(0, from_value),
-        make_keyframe(duration, to_value)
+        make_keyframe(start_t, from_value),
+        make_keyframe(end_t, to_value)
     ]
 
 def _scale_at_ratio(ops, ratio, fallback):
@@ -438,7 +463,7 @@ def _convert_keyframe_item_value(op, item, canvas_cfg, seg, property_type, ops_c
         v = _clamp_position_norm_by_scale(v, scale)
     return v
 
-def apply_random_presets_to_file(path, base_args, presets):
+def apply_random_presets_to_file(path, base_args, presets, cancel_check=None):
     if not presets:
         return 0
     data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
@@ -454,6 +479,9 @@ def apply_random_presets_to_file(path, base_args, presets):
     changed = 0
 
     for ti, track in enumerate(tracks):
+        if cancel_check and cancel_check():
+            from app.job_control import JobCancelled
+            raise JobCancelled("Quy trình áp dụng keyframe đã bị hủy bởi người dùng.")
         if ti not in primary_track_indices:
             continue
         for seg in track.get('segments') or []:
@@ -615,7 +643,7 @@ def _find_transition_template_in_root(root, target_name):
     return None
 
 
-def apply_random_transitions_to_file(path, base_args, transition_presets):
+def apply_random_transitions_to_file(path, base_args, transition_presets, cancel_check=None):
     if not transition_presets:
         return 0
     data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
@@ -664,6 +692,9 @@ def apply_random_transitions_to_file(path, base_args, transition_presets):
         return 0
 
     for ti, track in enumerate(tracks):
+        if cancel_check and cancel_check():
+            from app.job_control import JobCancelled
+            raise JobCancelled("Quy trình chèn chuyển cảnh đã bị hủy bởi người dùng.")
         if ti not in primary_track_indices:
             continue
         segs = track.get('segments') or []
@@ -844,34 +875,41 @@ def mirror_draft_file(source, mirrors):
     return errors
 
 def is_capcut_running():
-    """Phát hiện CapCut đang chạy. Dùng bộ lọc IMAGENAME + CSV để parse ổn định
-    trên mọi ngôn ngữ Windows (không phụ thuộc vị trí cột)."""
-    for image in ('CapCut.exe', 'CapCutPC.exe'):
-        try:
-            out = subprocess.check_output(
-                ['tasklist', '/FI', f'IMAGENAME eq {image}', '/FO', 'CSV', '/NH'],
-                text=True, encoding='utf-8', errors='ignore',
-            )
-        except Exception:
-            continue
-        # Khi có tiến trình, dòng CSV bắt đầu bằng "ImageName",...
-        # Khi không có, tasklist in "INFO: No tasks..." (không có dấu ngoặc kép tên ảnh).
-        if f'"{image.lower()}"' in out.lower():
-            return True
+    """Phát hiện CapCut đang chạy bằng psutil thay cho tasklist để tránh lỗi parsing CSV trên các ngôn ngữ Windows."""
+    try:
+        for proc in psutil.process_iter(['name']):
+            try:
+                name = proc.info.get('name')
+                if name and name.lower() in ('capcut.exe', 'capcutpc.exe'):
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    except Exception:
+        pass
     return False
 
 def close_capcut(force):
     if not is_capcut_running():
         return True
     try:
-        targets = ['CapCut.exe', 'CapCutPC.exe']
-        for target in targets:
-            cmd = ['taskkill', '/IM', target]
-            if force:
-                cmd.append('/F')
-            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            subprocess.run(cmd, check=False, capture_output=True, text=True, creationflags=creationflags)
-        return not is_capcut_running()
+        for proc in psutil.process_iter(['name']):
+            try:
+                name = proc.info.get('name')
+                if name and name.lower() in ('capcut.exe', 'capcutpc.exe'):
+                    if force:
+                        proc.kill()
+                    else:
+                        proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        # Wait up to 3 seconds for processes to terminate
+        import time
+        for _ in range(15):
+            if not is_capcut_running():
+                return True
+            time.sleep(0.2)
+        return False
     except Exception:
         return not is_capcut_running()
 

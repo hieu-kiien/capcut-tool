@@ -20,11 +20,13 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from app.queue_manager import BatchQueueManager, BuildJob
+from app.icons import get_svg_icon
 
 class BuildWidget(QWidget):
     # Signals to sync with MainWindow pipeline actions
     run_requested = Signal()  # Request current config to be started immediately
     cancel_requested = Signal()
+    add_to_queue_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,8 +50,23 @@ class BuildWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # Page Header
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setSpacing(4)
+
+        lbl_title = QLabel("Trung tâm dựng")
+        lbl_title.setObjectName("pageTitle")
+        lbl_subtitle = QLabel("Theo dõi tiến trình kiểm tra preflight, chạy các bước tạo timeline và ghi dự án nháp hàng loạt.")
+        lbl_subtitle.setObjectName("pageSubtitle")
+
+        header_layout.addWidget(lbl_title)
+        header_layout.addWidget(lbl_subtitle)
+        layout.addWidget(header_widget)
 
         # Main splitter (Left: Queue list, Right: Job detail + Live Logs)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -66,7 +83,7 @@ class BuildWidget(QWidget):
         left_card = QFrame()
         left_card.setObjectName("queueCard")
         left_card_layout = QVBoxLayout(left_card)
-        left_card_layout.setContentsMargins(12, 12, 12, 12)
+        left_card_layout.setContentsMargins(16, 16, 16, 16)
         left_card_layout.setSpacing(10)
 
         left_title_row = QHBoxLayout()
@@ -85,22 +102,46 @@ class BuildWidget(QWidget):
         ctrl_layout = QHBoxLayout()
         ctrl_layout.setSpacing(6)
 
-        self.btn_start_queue = QPushButton("▶ Chạy queue")
+        self.btn_add_to_queue = QPushButton("  Thêm dự án")
+        self.btn_add_to_queue.setIcon(get_svg_icon("plus", color="#ffffff", size=14))
+        self.btn_add_to_queue.setCursor(Qt.PointingHandCursor)
+        self.btn_add_to_queue.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00F2FE, stop:1 #7F00FF);
+                color: #ffffff;
+                font-weight: bold;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                opacity: 0.9;
+            }
+        """)
+        self.btn_add_to_queue.clicked.connect(lambda: self.add_to_queue_requested.emit())
+        ctrl_layout.addWidget(self.btn_add_to_queue)
+
+        self.btn_start_queue = QPushButton("  Chạy queue")
+        self.btn_start_queue.setIcon(get_svg_icon("play", color="#ffffff", size=14))
         self.btn_start_queue.setObjectName("btnStartQueue")
         self.btn_start_queue.clicked.connect(self._start_queue_click)
         ctrl_layout.addWidget(self.btn_start_queue)
 
-        self.btn_pause_queue = QPushButton("⏸ Tạm dừng")
+        self.btn_pause_queue = QPushButton("  Tạm dừng")
+        self.btn_pause_queue.setIcon(get_svg_icon("pause", color="#ffffff", size=14))
         self.btn_pause_queue.setObjectName("btnPauseQueue")
         self.btn_pause_queue.clicked.connect(self._pause_queue_click)
         ctrl_layout.addWidget(self.btn_pause_queue)
 
-        self.btn_skip_job = QPushButton("⏭ Bỏ qua")
+        self.btn_skip_job = QPushButton("  Bỏ qua")
+        self.btn_skip_job.setIcon(get_svg_icon("skip", color="#ffffff", size=14))
         self.btn_skip_job.setObjectName("btnSkipJob")
         self.btn_skip_job.clicked.connect(self._skip_job_click)
         ctrl_layout.addWidget(self.btn_skip_job)
 
-        self.btn_clear_queue = QPushButton("🧹 Xóa hết")
+        self.btn_clear_queue = QPushButton("  Xóa hết")
+        self.btn_clear_queue.setIcon(get_svg_icon("trash", color="#ef4444", size=14))
         self.btn_clear_queue.setObjectName("btnClearQueue")
         self.btn_clear_queue.clicked.connect(self._clear_queue_click)
         ctrl_layout.addWidget(self.btn_clear_queue)
@@ -829,3 +870,16 @@ class BuildWidget(QWidget):
         status_lbl = self.preflight_value_labels.get(code)
         if status_lbl:
             status_lbl.setText(message)
+
+    def shutdown(self, wait_ms: int = 5000) -> bool:
+        """
+        Cleanly requests shutdown of active build queue jobs.
+        Returns True if safe to close, False otherwise.
+        """
+        try:
+            from app.queue_manager import BatchQueueManager
+            BatchQueueManager.get_instance().cancel_current_job()
+            return True
+        except Exception as e:
+            print(f"Error during BuildWidget shutdown: {e}")
+            return True

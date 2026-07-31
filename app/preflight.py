@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Union
 
 from runtime_tools import pymediainfo_available, resolve_ffmpeg, resolve_ffprobe, tool_first_line
-from app.path_validation import validate_project_name
+from core.path_validation import validate_project_name
 import media_probe
 from capcut_draft_creator import parse_srt
 
@@ -29,7 +29,7 @@ class PreflightReport:
     draft_action: str = "Tạo mới"
     can_run: bool = True
 
-def run_preflight(config: Any) -> PreflightReport:
+def run_preflight(config: Any, fast_mode: bool = False) -> PreflightReport:
     """
     Perform all preflight checks based on the provided configuration.
     config can be a ProjectConfig instance or a dict.
@@ -154,17 +154,21 @@ def run_preflight(config: Any) -> PreflightReport:
                 blocks_run=True
             ))
         else:
-            voice_asset = media_probe.probe_media(voice_path)
-            if voice_asset.error:
-                issues.append(PreflightIssue(
-                    code="voice",
-                    severity="error",
-                    message=f"Không thể đọc thông tin tệp giọng đọc: {voice_asset.error}",
-                    blocks_run=True
-                ))
-            else:
-                voice_duration_sec = voice_asset.duration_us / 1e6
+            if fast_mode:
                 voice_ok = True
+                voice_duration_sec = 0.0
+            else:
+                voice_asset = media_probe.probe_media(voice_path)
+                if voice_asset.error:
+                    issues.append(PreflightIssue(
+                        code="voice",
+                        severity="error",
+                        message=f"Không thể đọc thông tin tệp giọng đọc: {voice_asset.error}",
+                        blocks_run=True
+                    ))
+                else:
+                    voice_duration_sec = voice_asset.duration_us / 1e6
+                    voice_ok = True
     else:
         issues.append(PreflightIssue(
             code="voice",
@@ -208,11 +212,14 @@ def run_preflight(config: Any) -> PreflightReport:
                     iterator = media_dir.rglob("*") if recursive_scan else media_dir.iterdir()
                     for p in iterator:
                         if p.is_file() and p.suffix.lower() in extensions:
-                            asset = media_probe.probe_media(p)
-                            if asset.error:
-                                invalid_media_count += 1
-                            else:
+                            if fast_mode:
                                 media_count += 1
+                            else:
+                                asset = media_probe.probe_media(p)
+                                if asset.error:
+                                    invalid_media_count += 1
+                                else:
+                                    media_count += 1
                 except Exception as exc:
                     issues.append(PreflightIssue(
                         code="media",

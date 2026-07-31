@@ -25,7 +25,7 @@ Use a narrow, evidence-first workflow in this repository. Assume long recursive 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **capcut tool** (5988 symbols, 8850 relationships, 285 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **capcut tool** (6358 symbols, 9314 relationships, 283 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -65,3 +65,13 @@ This project is indexed by GitNexus as **capcut tool** (5988 symbols, 8850 relat
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Commercial Studio UI/UX & CapCut Automation Rules
+
+- **Design Token 3-Layer System**: Use Dark Obsidian (`#121214`), Surface (`#1E1E22`), and Cyan-Violet Gradient (`linear-gradient(135deg, #00F2FE 0%, #7F00FF 100%)`). Fonts must default to Inter (UI) and JetBrains Mono (Timecode/Console).
+- **No Emoji as Structural Icons**: Use vector-based SVG icons (Lucide / Phosphor Icons) for UI controls and navigation instead of text emojis.
+- **Single-Screen 3-Column Studio Layout**: Bounded layout using `QSplitter` (Left: Material Assets 25% | Center: Canvas & Timeline 50% | Right: Keyframe Presets & Export 25%).
+- **1-Click Launch CapCut PC**: Include direct action to auto-discover and launch `CapCut.exe` on Windows (`%LOCALAPPDATA%\CapCut\Apps\CapCut.exe`).
+- **Audio Auto-Ducking (20%)**: Background music (BGM) volume must automatically scale to 20% when Voice narration is present to prevent audio drown-out.
+- **Dynamic Caption Auto-Wrap**: Subtitle sentences longer than 8 words must break into two lines (`\n`) for clean 9:16 vertical video framing.
+- **Keyframe Padding Offset (0.3s)**: Zoom/Pan keyframe start and end points must be offset by 0.3 seconds from clip boundaries to prevent transition jitter.

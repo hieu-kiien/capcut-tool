@@ -3,6 +3,25 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+def auto_wrap_subtitle(text: str, max_words: int = 8) -> str:
+    """
+    Wrap subtitle text containing > max_words into two lines (\n)
+    for clean 9:16 vertical video framing.
+    """
+    if not text:
+        return ""
+    lines = text.split("\n")
+    wrapped_lines = []
+    for line in lines:
+        words = line.split()
+        if len(words) > max_words:
+            mid = len(words) // 2
+            wrapped_lines.append(" ".join(words[:mid]) + "\n" + " ".join(words[mid:]))
+        else:
+            wrapped_lines.append(line)
+    return "\n".join(wrapped_lines)
+
+
 def parse_srt_file(srt_path: str | Path) -> List[Dict]:
     """
     Parses an SRT file and returns a list of dictionaries with:
@@ -54,9 +73,10 @@ def parse_srt_file(srt_path: str | Path) -> List[Dict]:
         if duration_us <= 0:
             continue
 
-        text = match.group(10).strip()
-        if not text:
+        raw_text = match.group(10).strip()
+        if not raw_text:
             continue
+        text = auto_wrap_subtitle(raw_text, max_words=8)
             
         start_time_str = f"{sh:02d}:{sm:02d}:{ss:02d},{sms:03d}"
         end_time_str = f"{eh:02d}:{em:02d}:{es:02d},{ems:03d}"

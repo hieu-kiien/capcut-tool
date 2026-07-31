@@ -3,6 +3,12 @@ import time
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QObject, QUrl
 from PySide6.QtGui import QPixmap, QDesktopServices
+from app.theme import (
+    COLOR_TEAL, COLOR_CARD_BG, COLOR_CARD_BORDER, COLOR_ERROR, COLOR_SUCCESS,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_MUTED,
+    COLOR_DARK_ZINC, COLOR_SIDEBAR_BG, COLOR_BG_CONSOLE, COLOR_TEXT_CONSOLE,
+    COLOR_TEXT_WHITE, COLOR_TEXT_LIGHT, COLOR_TEXT_BLACK, GRADIENT_PRIMARY
+)
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -30,8 +36,10 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
     QTabWidget,
-    QCheckBox
+    QCheckBox,
+    QAbstractItemView
 )
+from app.icons import get_svg_icon
 from assets.manager import AssetManager
 from app.downloader import YtDlpDownloadRunner, DownloadOptions, parse_url_list
 
@@ -176,6 +184,22 @@ class MediaStudioWidget(QWidget):
         self._build_ui()
         self.refresh_library()
 
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            paths = [u.toLocalFile() for u in urls if u.toLocalFile()]
+            if paths:
+                self._import_files(paths)
+                event.acceptProposedAction()
+
     def shutdown(self, wait_ms: int = 5000) -> bool:
         workers = [self.import_worker, self.dl_thread, self.cutter_worker]
         deadline = time.monotonic() + max(0, wait_ms) / 1000.0
@@ -190,7 +214,6 @@ class MediaStudioWidget(QWidget):
             except RuntimeError:
                 continue
 
-        all_stopped = True
         for worker in workers:
             if worker is None:
                 continue
@@ -198,43 +221,47 @@ class MediaStudioWidget(QWidget):
                 if worker.isRunning():
                     remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
                     if remaining_ms == 0 or not worker.wait(remaining_ms):
-                        all_stopped = False
+                        try:
+                            worker.terminate()
+                            worker.wait(500)
+                        except Exception:
+                            pass
             except RuntimeError:
                 continue
-        return all_stopped
+        return True
 
     def _build_ui(self) -> None:
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(16, 16, 16, 16)
         main_layout.setSpacing(14)
-
+        
         # 1. Header (Title & Description)
         header_widget = QWidget()
         header_layout = QVBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 4)
         header_layout.setSpacing(4)
-
+ 
         lbl_title = QLabel("Xưởng media")
-        lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #ffffff;")
+        lbl_title.setObjectName("pageTitle")
         lbl_subtitle = QLabel("Thu thập, phân tích và định hình tài nguyên hình ảnh/âm thanh trong dự án.")
-        lbl_subtitle.setStyleSheet("font-size: 13px; color: #94a3b8;")
-        
+        lbl_subtitle.setObjectName("pageSubtitle")
+         
         header_layout.addWidget(lbl_title)
         header_layout.addWidget(lbl_subtitle)
         main_layout.addWidget(header_widget)
 
         # 2. Tabbed Panel
         self.tab_widget = QTabWidget()
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
+        self.tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
                 border: 1px solid rgba(255, 255, 255, 0.08);
-                background-color: #111827;
+                background-color: {COLOR_CARD_BG};
                 border-radius: 8px;
                 padding: 4px;
-            }
-            QTabBar::tab {
-                background: #1f2937;
-                color: #9ca3af;
+            }}
+            QTabBar::tab {{
+                background: {COLOR_SIDEBAR_BG};
+                color: {COLOR_TEXT_MUTED};
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 border-bottom: none;
                 border-top-left-radius: 6px;
@@ -242,57 +269,201 @@ class MediaStudioWidget(QWidget):
                 padding: 8px 16px;
                 margin-right: 4px;
                 font-weight: bold;
-            }
-            QTabBar::tab:hover {
-                background: #374151;
-                color: #ffffff;
-            }
-            QTabBar::tab:selected {
-                background: #111827;
-                color: #ffffff;
+            }}
+            QTabBar::tab:hover {{
+                background: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_WHITE};
+            }}
+            QTabBar::tab:selected {{
+                background: {COLOR_CARD_BG};
+                color: {COLOR_TEXT_WHITE};
                 border-color: rgba(255, 255, 255, 0.12);
-                border-bottom: 2px solid #8b5cf6;
-            }
+                border-bottom: 2px solid {COLOR_TEAL};
+            }}
         """)
 
         # Tab 1: Library & Scan Warnings
         self.library_tab = QWidget()
         self._build_library_tab()
-        self.tab_widget.addTab(self.library_tab, "📂 Thư viện tài nguyên")
+        self.tab_widget.addTab(self.library_tab, get_svg_icon("folder", color=COLOR_TEXT_MUTED, size=16), "Thư viện tài nguyên")
 
         # Tab 2: Downloader
         self.downloader_tab = QWidget()
         self._build_downloader_tab()
-        self.tab_widget.addTab(self.downloader_tab, "📥 Tải media (Downloader)")
+        self.tab_widget.addTab(self.downloader_tab, get_svg_icon("download", color=COLOR_TEXT_MUTED, size=16), "Tải media (Downloader)")
 
         # Tab 3: Video Cutter
         self.cutter_tab = QWidget()
         self._build_cutter_tab()
-        self.tab_widget.addTab(self.cutter_tab, "✂️ Cắt video (FFmpeg)")
+        self.tab_widget.addTab(self.cutter_tab, get_svg_icon("scissors", color=COLOR_TEXT_MUTED, size=16), "Cắt video (FFmpeg)")
 
         main_layout.addWidget(self.tab_widget, 1)
 
     def _build_library_tab(self) -> None:
         layout = QHBoxLayout(self.library_tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
 
-        # Left panel: Preview + Warnings
-        left_panel = QWidget()
+        # 3-Column Studio Splitter (Left 25% | Center 50% | Right 25%)
+        studio_splitter = QSplitter(Qt.Orientation.Horizontal)
+        studio_splitter.setObjectName("studioSplitter")
+
+        # 1. Left Panel (Material Assets 25%)
+        left_panel = QFrame()
+        left_panel.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border-radius: 8px; border: 1px solid {COLOR_CARD_BORDER};")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(10)
 
-        # Media Preview Card
-        preview_card = QFrame()
-        preview_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);")
-        preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(12, 12, 12, 12)
-        preview_layout.setSpacing(6)
+        lbl_lib_title = QLabel("Tài nguyên đã nhập")
+        lbl_lib_title.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {COLOR_TEXT_WHITE}; border: none;")
+        left_layout.addWidget(lbl_lib_title)
 
-        lbl_preview_title = QLabel("🎬 Xem trước media")
-        lbl_preview_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff; border: none;")
-        preview_layout.addWidget(lbl_preview_title)
+        # Search and filter
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+        
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Tìm kiếm tệp...")
+        self.search_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        self.search_edit.textChanged.connect(self.refresh_library)
+        filter_row.addWidget(self.search_edit, 2)
+
+        self.filter_category = QComboBox()
+        self.filter_category.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        self.filter_category.addItem("Tất cả danh mục", "all")
+        self.filter_category.addItem("Lớp phủ (overlay)", "overlay")
+        self.filter_category.addItem("Logo thương hiệu (logo)", "logo")
+        self.filter_category.addItem("Mở đầu (intro)", "intro")
+        self.filter_category.addItem("Kết thúc (outro)", "outro")
+        self.filter_category.addItem("Nhạc nền (bgm)", "bgm")
+        self.filter_category.addItem("Chuyển cảnh (transition)", "transition")
+        self.filter_category.currentIndexChanged.connect(self.refresh_library)
+        filter_row.addWidget(self.filter_category, 1)
+
+        left_layout.addLayout(filter_row)
+
+        # Main Table of Assets
+        self.table = QTableWidget()
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels([
+            "Tên tệp", "Loại", "Danh mục", "Thời lượng", "Độ phân giải", "Nhãn (Tags)", "Hành động"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSortingEnabled(True)
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {COLOR_SIDEBAR_BG};
+                gridline-color: {COLOR_CARD_BORDER};
+                border: 1px solid {COLOR_CARD_BORDER};
+                border-radius: 4px;
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+            QHeaderView::section {{
+                background-color: {COLOR_CARD_BG};
+                color: {COLOR_TEXT_WHITE};
+                padding: 6px;
+                border: none;
+                font-weight: bold;
+            }}
+            QTableWidget::item {{
+                padding: 6px;
+            }}
+        """)
+        self.table.doubleClicked.connect(self._on_table_double_clicked)
+        left_layout.addWidget(self.table, 1)
+
+        # Import Buttons
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.setSpacing(6)
+        
+        self.btn_import_files = QPushButton(" Nhập tệp")
+        self.btn_import_files.setIcon(get_svg_icon("plus", color="#ffffff", size=14))
+        self.btn_import_files.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_WHITE};
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.08);
+            }}
+        """)
+        self.btn_import_files.clicked.connect(self._on_import_files_click)
+        action_buttons_layout.addWidget(self.btn_import_files)
+
+        self.btn_import_dir = QPushButton(" Nhập thư mục")
+        self.btn_import_dir.setIcon(get_svg_icon("folder", color="#ffffff", size=14))
+        self.btn_import_dir.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_WHITE};
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.08);
+            }}
+        """)
+        self.btn_import_dir.clicked.connect(self._on_import_dir_click)
+        action_buttons_layout.addWidget(self.btn_import_dir)
+
+        self.btn_clear_library = QPushButton(" Xóa tất cả")
+        self.btn_clear_library.setIcon(get_svg_icon("trash", color="#ef4444", size=14))
+        self.btn_clear_library.setStyleSheet("background-color: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
+        self.btn_clear_library.clicked.connect(self._on_clear_library_click)
+        action_buttons_layout.addWidget(self.btn_clear_library)
+
+        left_layout.addLayout(action_buttons_layout)
+
+        # Import Progress Frame
+        self.progress_frame = QFrame()
+        self.progress_frame.setVisible(False)
+        self.progress_frame.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; border-radius: 6px; padding: 6px; border: 1px solid {COLOR_CARD_BORDER};")
+        progress_layout = QHBoxLayout(self.progress_frame)
+        progress_layout.setContentsMargins(6, 6, 6, 6)
+        self.lbl_progress = QLabel("Đang nhập tài nguyên...")
+        self.lbl_progress.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_MUTED}; border: none;")
+        progress_layout.addWidget(self.lbl_progress)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {COLOR_CARD_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
+                border-radius: 4px;
+                text-align: center;
+                height: 12px;
+                font-size: 9px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {COLOR_TEAL};
+                border-radius: 3px;
+            }}
+        """)
+        progress_layout.addWidget(self.progress_bar, 1)
+        left_layout.addWidget(self.progress_frame)
+
+        studio_splitter.addWidget(left_panel)
+
+        # 2. Center Panel (Canvas & Media Preview 50%)
+        center_panel = QFrame()
+        center_panel.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border-radius: 8px; border: 1px solid {COLOR_CARD_BORDER};")
+        center_layout = QVBoxLayout(center_panel)
+        center_layout.setContentsMargins(12, 12, 12, 12)
+        center_layout.setSpacing(6)
+
+        lbl_preview_title = QLabel("Canvas & Xem trước media")
+        lbl_preview_title.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {COLOR_TEXT_WHITE}; border: none;")
+        center_layout.addWidget(lbl_preview_title)
 
         preview_scroll = QScrollArea()
         preview_scroll.setWidgetResizable(True)
@@ -305,174 +476,43 @@ class MediaStudioWidget(QWidget):
         self.preview_grid_layout.setSpacing(8)
         
         preview_scroll.setWidget(self.preview_grid_widget)
-        preview_layout.addWidget(preview_scroll, 1)
-        left_layout.addWidget(preview_card, 3)
+        center_layout.addWidget(preview_scroll, 1)
 
-        # Scan Warnings Card
-        warnings_card = QFrame()
-        warnings_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);")
-        warnings_layout = QVBoxLayout(warnings_card)
-        warnings_layout.setContentsMargins(12, 12, 12, 12)
-        warnings_layout.setSpacing(6)
+        studio_splitter.addWidget(center_panel)
 
-        lbl_scan_title = QLabel("⚠️ Cảnh báo & Lỗi tệp")
-        lbl_scan_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff; border: none;")
-        warnings_layout.addWidget(lbl_scan_title)
+        # 3. Right Panel (Warnings & Keyframe Presets / Scan Config 25%)
+        right_panel = QFrame()
+        right_panel.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border-radius: 8px; border: 1px solid {COLOR_CARD_BORDER};")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setSpacing(6)
+
+        lbl_scan_title = QLabel("Cảnh báo & Lỗi tệp")
+        lbl_scan_title.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {COLOR_TEXT_WHITE}; border: none;")
+        right_layout.addWidget(lbl_scan_title)
 
         self.scan_warnings_list = QListWidget()
-        self.scan_warnings_list.setStyleSheet("""
-            QListWidget {
-                background-color: #0b0f19;
-                border: 1px solid #1e293b;
+        self.scan_warnings_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {COLOR_SIDEBAR_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 4px;
                 padding: 4px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 border-bottom: 1px solid rgba(255, 255, 255, 0.02);
                 padding: 4px;
                 font-size: 11px;
-            }
+                color: {COLOR_TEXT_MUTED};
+            }}
         """)
-        warnings_layout.addWidget(self.scan_warnings_list, 1)
-        left_layout.addWidget(warnings_card, 2)
+        right_layout.addWidget(self.scan_warnings_list, 1)
 
-        layout.addWidget(left_panel, 2)
+        studio_splitter.addWidget(right_panel)
 
-        # Right panel: Table + Actions
-        right_panel = QFrame()
-        right_panel.setStyleSheet("background-color: #0f172a; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);")
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(12, 12, 12, 12)
-        right_layout.setSpacing(10)
-
-        lbl_lib_title = QLabel("📂 Danh sách tài nguyên đã nhập")
-        lbl_lib_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff; border: none;")
-        right_layout.addWidget(lbl_lib_title)
-
-        # Search and filter
-        filter_row = QHBoxLayout()
-        filter_row.setSpacing(8)
-        
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Tìm kiếm theo tên tệp hoặc nhãn...")
-        self.search_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
-        self.search_edit.textChanged.connect(self.refresh_library)
-        filter_row.addWidget(self.search_edit, 3)
-
-        self.filter_category = QComboBox()
-        self.filter_category.addItem("Tất cả danh mục", "all")
-        self.filter_category.addItem("Lớp phủ (overlay)", "overlay")
-        self.filter_category.addItem("Logo thương hiệu (logo)", "logo")
-        self.filter_category.addItem("Mở đầu (intro)", "intro")
-        self.filter_category.addItem("Kết thúc (outro)", "outro")
-        self.filter_category.addItem("Nhạc nền (bgm)", "bgm")
-        self.filter_category.addItem("Chuyển cảnh (transition)", "transition")
-        self.filter_category.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
-        self.filter_category.currentIndexChanged.connect(self.refresh_library)
-        filter_row.addWidget(self.filter_category, 2)
-        right_layout.addLayout(filter_row)
-
-        # Import Buttons
-        action_buttons_layout = QHBoxLayout()
-        action_buttons_layout.setSpacing(8)
-        
-        self.btn_import_files = QPushButton("📁 Nhập tệp")
-        self.btn_import_files.setStyleSheet("""
-            QPushButton {
-                background-color: #334155;
-                color: #ffffff;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #475569;
-            }
-        """)
-        self.btn_import_files.clicked.connect(self._on_import_files_click)
-        action_buttons_layout.addWidget(self.btn_import_files)
-
-        self.btn_import_dir = QPushButton("📂 Nhập thư mục")
-        self.btn_import_dir.setStyleSheet("""
-            QPushButton {
-                background-color: #334155;
-                color: #ffffff;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #475569;
-            }
-        """)
-        self.btn_import_dir.clicked.connect(self._on_import_dir_click)
-        action_buttons_layout.addWidget(self.btn_import_dir)
-        right_layout.addLayout(action_buttons_layout)
-
-        # Import Progress Frame
-        self.progress_frame = QFrame()
-        self.progress_frame.setVisible(False)
-        self.progress_frame.setStyleSheet("background-color: #0b0f19; border-radius: 6px; padding: 6px; border: 1px solid #1e293b;")
-        progress_layout = QHBoxLayout(self.progress_frame)
-        progress_layout.setContentsMargins(6, 6, 6, 6)
-        self.lbl_progress = QLabel("Đang nhập tài nguyên...")
-        self.lbl_progress.setStyleSheet("font-size: 11px; color: #94a3b8; border: none;")
-        progress_layout.addWidget(self.lbl_progress)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 4px;
-                text-align: center;
-                height: 12px;
-                font-size: 9px;
-            }
-            QProgressBar::chunk {
-                background-color: #8b5cf6;
-                border-radius: 3px;
-            }
-        """)
-        progress_layout.addWidget(self.progress_bar, 1)
-        right_layout.addWidget(self.progress_frame)
-
-        # Resources Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Tên tệp", "Loại", "Danh mục", "Thời lượng", "Độ phân giải", "Nhãn (Tags)", "Hành động"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSortingEnabled(True)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                background-color: #0b0f19;
-                gridline-color: #1e293b;
-                border: 1px solid #1e293b;
-                border-radius: 4px;
-                color: #e2e8f0;
-            }
-            QHeaderView::section {
-                background-color: #1e293b;
-                color: #ffffff;
-                padding: 6px;
-                border: none;
-                font-weight: bold;
-            }
-            QTableWidget::item {
-                padding: 6px;
-            }
-        """)
-        self.table.doubleClicked.connect(self._on_table_double_clicked)
-        right_layout.addWidget(self.table, 1)
-
-        layout.addWidget(right_panel, 3)
+        # Apply Splitter Proportions (Left: 25% | Center: 50% | Right: 25%)
+        studio_splitter.setSizes([250, 500, 250])
+        layout.addWidget(studio_splitter)
 
     def _build_downloader_tab(self) -> None:
         layout = QVBoxLayout(self.downloader_tab)
@@ -480,18 +520,18 @@ class MediaStudioWidget(QWidget):
         layout.setSpacing(14)
 
         dl_card = QFrame()
-        dl_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);")
+        dl_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border-radius: 8px; border: 1px solid {COLOR_CARD_BORDER};")
         dl_layout = QVBoxLayout(dl_card)
         dl_layout.setContentsMargins(16, 16, 16, 16)
         dl_layout.setSpacing(12)
 
-        lbl_dl_title = QLabel("📥 Tải tài nguyên từ URL (YouTube, TikTok, Facebook, ...)")
-        lbl_dl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #ffffff; border: none;")
+        lbl_dl_title = QLabel("Tải tài nguyên từ URL (YouTube, TikTok, Facebook, ...)")
+        lbl_dl_title.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {COLOR_TEXT_WHITE}; border: none;")
         dl_layout.addWidget(lbl_dl_title)
 
         self.download_urls_edit = QPlainTextEdit()
         self.download_urls_edit.setPlaceholderText("Nhập danh sách URL cần tải, mỗi dòng một URL.")
-        self.download_urls_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 6px;")
+        self.download_urls_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 6px;")
         self.download_urls_edit.setMaximumHeight(120)
         dl_layout.addWidget(self.download_urls_edit)
 
@@ -502,11 +542,12 @@ class MediaStudioWidget(QWidget):
         # Output folder row
         self.download_out_edit = QLineEdit()
         self.download_out_edit.setPlaceholderText("Thư mục lưu tệp tải về...")
-        self.download_out_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
-        btn_browse_out = QPushButton("📂")
+        self.download_out_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        btn_browse_out = QPushButton()
+        btn_browse_out.setIcon(get_svg_icon("folder", color="#ffffff", size=14))
         btn_browse_out.setToolTip("Chọn thư mục lưu")
         btn_browse_out.setFixedSize(32, 24)
-        btn_browse_out.setStyleSheet("background-color: #1e293b; color: #ffffff; border: 1px solid #334155; border-radius: 4px;")
+        btn_browse_out.setStyleSheet(f"background-color: {COLOR_CARD_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px;")
         btn_browse_out.clicked.connect(self._on_browse_dl_out)
         out_layout = QHBoxLayout()
         out_layout.addWidget(self.download_out_edit, 1)
@@ -516,11 +557,12 @@ class MediaStudioWidget(QWidget):
         # Cookies row
         self.download_cookies_edit = QLineEdit()
         self.download_cookies_edit.setPlaceholderText("Đường dẫn file cookies (không bắt buộc)...")
-        self.download_cookies_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
-        btn_browse_cookies = QPushButton("🔑")
+        self.download_cookies_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        btn_browse_cookies = QPushButton()
+        btn_browse_cookies.setIcon(get_svg_icon("key", color="#ffffff", size=14))
         btn_browse_cookies.setToolTip("Chọn tệp cookies.txt")
         btn_browse_cookies.setFixedSize(32, 24)
-        btn_browse_cookies.setStyleSheet("background-color: #1e293b; color: #ffffff; border: 1px solid #334155; border-radius: 4px;")
+        btn_browse_cookies.setStyleSheet(f"background-color: {COLOR_CARD_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px;")
         btn_browse_cookies.clicked.connect(self._on_browse_dl_cookies)
         cookies_layout = QHBoxLayout()
         cookies_layout.addWidget(self.download_cookies_edit, 1)
@@ -530,11 +572,11 @@ class MediaStudioWidget(QWidget):
         # Tool & Kind
         self.download_tool_combo = QComboBox()
         self.download_tool_combo.addItems(["yt-dlp", "gallery-dl"])
-        self.download_tool_combo.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_tool_combo.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
         
         self.download_kind_combo = QComboBox()
         self.download_kind_combo.addItems(["Video", "Audio"])
-        self.download_kind_combo.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_kind_combo.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
         
         tool_layout = QHBoxLayout()
         tool_layout.addWidget(self.download_tool_combo, 1)
@@ -548,24 +590,24 @@ class MediaStudioWidget(QWidget):
         self.download_max_file_size_mb.setRange(0, 999999)
         self.download_max_file_size_mb.setValue(4096)
         self.download_max_file_size_mb.setSuffix(" MB")
-        self.download_max_file_size_mb.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_max_file_size_mb.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         self.download_stall_timeout_sec = QDoubleSpinBox()
         self.download_stall_timeout_sec.setRange(0, 999999)
         self.download_stall_timeout_sec.setValue(180)
         self.download_stall_timeout_sec.setSuffix(" s")
-        self.download_stall_timeout_sec.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_stall_timeout_sec.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         self.download_item_timeout_sec = QDoubleSpinBox()
         self.download_item_timeout_sec.setRange(0, 999999)
         self.download_item_timeout_sec.setValue(7200)
         self.download_item_timeout_sec.setSuffix(" s")
-        self.download_item_timeout_sec.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_item_timeout_sec.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         self.download_workers_spin = QSpinBox()
         self.download_workers_spin.setRange(1, 4)
         self.download_workers_spin.setValue(2)
-        self.download_workers_spin.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.download_workers_spin.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         adv_grid = QGridLayout()
         adv_grid.setVerticalSpacing(8)
@@ -583,28 +625,28 @@ class MediaStudioWidget(QWidget):
         # Progress Layout for Downloader
         self.dl_progress_frame = QFrame()
         self.dl_progress_frame.setVisible(False)
-        self.dl_progress_frame.setStyleSheet("background-color: #0b0f19; border-radius: 6px; padding: 8px; border: 1px solid #1e293b;")
+        self.dl_progress_frame.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; border-radius: 6px; padding: 8px; border: 1px solid {COLOR_CARD_BORDER};")
         dl_progress_layout = QVBoxLayout(self.dl_progress_frame)
         dl_progress_layout.setContentsMargins(8, 8, 8, 8)
         dl_progress_layout.setSpacing(6)
         self.lbl_dl_progress = QLabel("Bắt đầu tải...")
-        self.lbl_dl_progress.setStyleSheet("font-size: 11px; color: #94a3b8; border: none;")
+        self.lbl_dl_progress.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_MUTED}; border: none;")
         self.dl_progress_bar = QProgressBar()
         self.dl_progress_bar.setRange(0, 100)
-        self.dl_progress_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+        self.dl_progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {COLOR_CARD_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 4px;
                 text-align: center;
                 height: 16px;
                 font-size: 10px;
-                color: #ffffff;
-            }
-            QProgressBar::chunk {
-                background-color: #8b5cf6;
+                color: {COLOR_TEXT_WHITE};
+            }}
+            QProgressBar::chunk {{
+                background-color: {COLOR_TEAL};
                 border-radius: 3px;
-            }
+            }}
         """)
         dl_progress_layout.addWidget(self.lbl_dl_progress)
         dl_progress_layout.addWidget(self.dl_progress_bar)
@@ -612,44 +654,46 @@ class MediaStudioWidget(QWidget):
 
         # Action Buttons
         dl_buttons_layout = QHBoxLayout()
-        self.btn_run_download = QPushButton("🚀 Tải xuống")
-        self.btn_run_download.setStyleSheet("""
-            QPushButton {
-                background-color: #8b5cf6;
-                color: #ffffff;
+        self.btn_run_download = QPushButton(" Tải xuống")
+        self.btn_run_download.setIcon(get_svg_icon("download", color="#000000", size=14))
+        self.btn_run_download.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_TEAL};
+                color: {COLOR_TEXT_BLACK};
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
                 padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #7c3aed;
-            }
-            QPushButton:disabled {
-                background-color: #4b5563;
-                color: #9ca3af;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: #0bc0a9;
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_SECONDARY};
+            }}
         """)
         self.btn_run_download.clicked.connect(self._on_start_download)
         
-        self.btn_cancel_download = QPushButton("🛑 Hủy")
+        self.btn_cancel_download = QPushButton(" Hủy")
+        self.btn_cancel_download.setIcon(get_svg_icon("x", color="#ffffff", size=14))
         self.btn_cancel_download.setEnabled(False)
-        self.btn_cancel_download.setStyleSheet("""
-            QPushButton {
-                background-color: #ef4444;
-                color: #ffffff;
+        self.btn_cancel_download.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ERROR};
+                color: {COLOR_TEXT_WHITE};
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
                 padding: 8px 16px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #dc2626;
-            }
-            QPushButton:disabled {
-                background-color: #4b5563;
-                color: #9ca3af;
-            }
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_SECONDARY};
+            }}
         """)
         self.btn_cancel_download.clicked.connect(self._on_cancel_download)
 
@@ -665,13 +709,13 @@ class MediaStudioWidget(QWidget):
         layout.setSpacing(14)
 
         cut_card = QFrame()
-        cut_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);")
+        cut_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border-radius: 8px; border: 1px solid {COLOR_CARD_BORDER};")
         cut_layout = QVBoxLayout(cut_card)
         cut_layout.setContentsMargins(16, 16, 16, 16)
         cut_layout.setSpacing(12)
 
-        lbl_cut_title = QLabel("✂️ Cắt video không mất chất lượng (Lossless Cut)")
-        lbl_cut_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #ffffff; border: none;")
+        lbl_cut_title = QLabel("Cắt video không mất chất lượng (Lossless Cut)")
+        lbl_cut_title.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {COLOR_TEXT_WHITE}; border: none;")
         cut_layout.addWidget(lbl_cut_title)
 
         form = QFormLayout()
@@ -681,11 +725,12 @@ class MediaStudioWidget(QWidget):
         # Source video file
         self.cutter_source_edit = QLineEdit()
         self.cutter_source_edit.setPlaceholderText("Đường dẫn tệp video nguồn cần cắt...")
-        self.cutter_source_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
-        btn_browse_src = QPushButton("📂")
+        self.cutter_source_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        btn_browse_src = QPushButton()
+        btn_browse_src.setIcon(get_svg_icon("folder", color="#ffffff", size=14))
         btn_browse_src.setToolTip("Chọn tệp video nguồn")
         btn_browse_src.setFixedSize(32, 24)
-        btn_browse_src.setStyleSheet("background-color: #1e293b; color: #ffffff; border: 1px solid #334155; border-radius: 4px;")
+        btn_browse_src.setStyleSheet(f"background-color: {COLOR_CARD_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px;")
         btn_browse_src.clicked.connect(self._on_browse_cutter_src)
         src_layout = QHBoxLayout()
         src_layout.addWidget(self.cutter_source_edit, 1)
@@ -699,7 +744,7 @@ class MediaStudioWidget(QWidget):
         self.cutter_start_spin.setDecimals(3)
         self.cutter_start_spin.setSingleStep(1.0)
         self.cutter_start_spin.setSuffix(" s")
-        self.cutter_start_spin.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.cutter_start_spin.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         self.cutter_duration_spin = QDoubleSpinBox()
         self.cutter_duration_spin.setRange(0.1, 999999.0)
@@ -707,7 +752,7 @@ class MediaStudioWidget(QWidget):
         self.cutter_duration_spin.setDecimals(3)
         self.cutter_duration_spin.setSingleStep(1.0)
         self.cutter_duration_spin.setSuffix(" s")
-        self.cutter_duration_spin.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.cutter_duration_spin.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
 
         time_layout = QHBoxLayout()
         time_layout.addWidget(self.cutter_start_spin, 1)
@@ -718,11 +763,12 @@ class MediaStudioWidget(QWidget):
         # Output video file
         self.cutter_dest_edit = QLineEdit()
         self.cutter_dest_edit.setPlaceholderText("Đường dẫn lưu tệp video đã cắt...")
-        self.cutter_dest_edit.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
-        btn_browse_dst = QPushButton("📂")
+        self.cutter_dest_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
+        btn_browse_dst = QPushButton()
+        btn_browse_dst.setIcon(get_svg_icon("folder", color="#ffffff", size=14))
         btn_browse_dst.setToolTip("Chọn nơi lưu video kết quả")
         btn_browse_dst.setFixedSize(32, 24)
-        btn_browse_dst.setStyleSheet("background-color: #1e293b; color: #ffffff; border: 1px solid #334155; border-radius: 4px;")
+        btn_browse_dst.setStyleSheet(f"background-color: {COLOR_CARD_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px;")
         btn_browse_dst.clicked.connect(self._on_browse_cutter_dst)
         dst_layout = QHBoxLayout()
         dst_layout.addWidget(self.cutter_dest_edit, 1)
@@ -732,15 +778,15 @@ class MediaStudioWidget(QWidget):
         # Auto import settings
         self.cutter_auto_import_chk = QCheckBox("Tự động nhập vào Thư viện tài nguyên sau khi cắt thành công")
         self.cutter_auto_import_chk.setChecked(True)
-        self.cutter_auto_import_chk.setStyleSheet("color: #e2e8f0; font-size: 11px;")
+        self.cutter_auto_import_chk.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 11px;")
         
         self.cutter_import_category = QComboBox()
         self.cutter_import_category.addItems(["overlay", "logo", "intro", "outro", "bgm", "transition"])
-        self.cutter_import_category.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 2px;")
+        self.cutter_import_category.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 2px;")
         
         self.cutter_import_tags = QLineEdit("cut")
         self.cutter_import_tags.setPlaceholderText("Các tag ngăn cách bằng dấu phẩy...")
-        self.cutter_import_tags.setStyleSheet("background-color: #0b0f19; color: #ffffff; border: 1px solid #1e293b; border-radius: 4px; padding: 4px;")
+        self.cutter_import_tags.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
 
         import_settings = QHBoxLayout()
         import_settings.addWidget(self.cutter_auto_import_chk, 2)
@@ -754,19 +800,19 @@ class MediaStudioWidget(QWidget):
 
         # Cutter Progress Bar (hidden initially)
         self.cutter_progress_bar = QProgressBar()
-        self.cutter_progress_bar.setRange(0, 0)  # Marquee indicator during FFmpeg process
+        self.cutter_progress_bar.setRange(0, 0)
         self.cutter_progress_bar.setVisible(False)
-        self.cutter_progress_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+        self.cutter_progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {COLOR_CARD_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 4px;
                 height: 12px;
-            }
-            QProgressBar::chunk {
-                background-color: #8b5cf6;
+            }}
+            QProgressBar::chunk {{
+                background-color: {COLOR_TEAL};
                 border-radius: 3px;
-            }
+            }}
         """)
         cut_layout.addWidget(self.cutter_progress_bar)
 
@@ -774,12 +820,12 @@ class MediaStudioWidget(QWidget):
         self.cutter_log_text = QPlainTextEdit()
         self.cutter_log_text.setReadOnly(True)
         self.cutter_log_text.setPlaceholderText("Tiến trình và log của FFmpeg sẽ hiển thị tại đây...")
-        self.cutter_log_text.setStyleSheet("""
-            background-color: #0b0f19;
-            color: #10b981;
+        self.cutter_log_text.setStyleSheet(f"""
+            background-color: {COLOR_BG_CONSOLE};
+            color: {COLOR_SUCCESS};
             font-family: Consolas, monospace;
             font-size: 11px;
-            border: 1px solid #1e293b;
+            border: 1px solid {COLOR_CARD_BORDER};
             border-radius: 4px;
             padding: 6px;
         """)
@@ -787,23 +833,24 @@ class MediaStudioWidget(QWidget):
         cut_layout.addWidget(self.cutter_log_text)
 
         # Run button
-        self.btn_run_cut = QPushButton("🚀 Bắt đầu cắt (Lossless Cut)")
-        self.btn_run_cut.setStyleSheet("""
-            QPushButton {
-                background-color: #8b5cf6;
-                color: #ffffff;
+        self.btn_run_cut = QPushButton(" Bắt đầu cắt (Lossless Cut)")
+        self.btn_run_cut.setIcon(get_svg_icon("scissors", color="#000000", size=14))
+        self.btn_run_cut.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_TEAL};
+                color: {COLOR_TEXT_BLACK};
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
                 padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #7c3aed;
-            }
-            QPushButton:disabled {
-                background-color: #4b5563;
-                color: #9ca3af;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: #0bc0a9;
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_CARD_BORDER};
+                color: {COLOR_TEXT_SECONDARY};
+            }}
         """)
         self.btn_run_cut.clicked.connect(self._on_start_cutting)
         cut_layout.addWidget(self.btn_run_cut)
@@ -962,6 +1009,21 @@ class MediaStudioWidget(QWidget):
             self.table.setCellWidget(idx, 6, btn_delete)
 
         self.table.setSortingEnabled(True)
+
+    @Slot()
+    def _on_clear_library_click(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Xác nhận xóa",
+            "Bạn có chắc chắn muốn xóa toàn bộ tài nguyên khỏi thư viện?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            mgr = AssetManager.get_instance()
+            if hasattr(mgr, "clear_all"):
+                mgr.clear_all()
+            self.refresh_library()
         
         self.update_scan_warnings()
         self.refresh_preview_grid()
@@ -1246,12 +1308,12 @@ class MediaStudioWidget(QWidget):
         card = QFrame()
         card.setStyleSheet("""
             QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+                background-color: #18181b;
+                border: 1px solid #27272a;
                 border-radius: 6px;
             }
             QFrame:hover {
-                border-color: #8b5cf6;
+                border-color: #0dd3ba;
             }
         """)
         card.setFixedSize(115, 130)
@@ -1276,7 +1338,7 @@ class MediaStudioWidget(QWidget):
                 lbl_thumb.setText("🖼️ Ảnh")
         else:
             lbl_thumb.setText("🎥 Video" if is_video else "📁 Tệp")
-            lbl_thumb.setStyleSheet("background-color: #0b0f19; border-radius: 4px; color: #8b5cf6; font-weight: bold; border: none;")
+            lbl_thumb.setStyleSheet("background-color: #0b0f19; border-radius: 4px; color: #0dd3ba; font-weight: bold; border: none;")
             
         layout.addWidget(lbl_thumb)
         
@@ -1293,8 +1355,6 @@ class MediaStudioWidget(QWidget):
         btn_view = QPushButton("Xem" if not is_video else "Phát")
         btn_view.setStyleSheet("""
             QPushButton {
-                background-color: #8b5cf6;
-                color: #ffffff;
                 font-size: 10px;
                 border: none;
                 border-radius: 3px;
@@ -1410,3 +1470,24 @@ class MediaStudioWidget(QWidget):
                 
         QMessageBox.information(self, "Thành công", f"Đã cắt video thành công!\nTệp kết quả: {out_path.name}")
         self.cutter_worker = None
+
+    def get_download_options(self, urls: list[str] = None, url_tools: list[str] = None) -> DownloadOptions:
+        if urls is None:
+            urls = parse_url_list(self.download_urls_edit.toPlainText().strip())
+        if url_tools is None:
+            url_tools = [self.download_tool_combo.currentText()]
+        return DownloadOptions(
+            urls=urls,
+            output_dir=self.download_out_edit.text().strip(),
+            cookies_file=self.download_cookies_edit.text().strip(),
+            max_file_size_mb=int(self.download_max_file_size_mb.value()),
+            stall_timeout_sec=int(self.download_stall_timeout_sec.value()),
+            item_timeout_sec=int(self.download_item_timeout_sec.value()),
+            url_tools=url_tools
+        )
+
+    def set_download_output_dir(self, path: str) -> None:
+        self.download_out_edit.setText(path)
+
+    def get_download_output_dir(self) -> str:
+        return self.download_out_edit.text().strip()

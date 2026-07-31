@@ -1,0 +1,29 @@
+[package]
+name = "capcut_long_story_studio"
+version = "2.0.0"
+description = "CapCut Long Story Studio PRO — High Performance Native Rust & Tauri v2 Desktop Engine"
+authors = ["Antigravity Senior Rust Architect"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+tokio = { version = "1.35", features = ["full"] }
+rayon = "1.8"
+regex = "1.10"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+memmap2 = "0.9"
+fs2 = "0.4"
+lru = "0.12"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

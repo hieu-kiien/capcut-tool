@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional, Callable
 from runtime_tools import resolve_ffmpeg
@@ -12,21 +13,13 @@ def lossless_cut_video(
     output_path: str | Path,
     start_sec: float,
     duration_sec: float,
-    log_callback: Optional[Callable[[str], None]] = None
+    log_callback: Optional[Callable[[str], None]] = None,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    cancel_event: Optional[threading.Event] = None
 ) -> Path:
     """
     Performs lossless video cutting using FFmpeg (-c copy).
-    Fast and does not lose quality.
-    
-    Args:
-        input_path: Path to the source video file.
-        output_path: Target path for the cut video.
-        start_sec: Start time in seconds (float).
-        duration_sec: Duration in seconds (float).
-        log_callback: Optional callback to receive execution logs.
-        
-    Returns:
-        Path object pointing to the output file.
+    Fast and does not lose quality. Supports progress and cancellation.
     """
     src = Path(input_path).resolve()
     dst = Path(output_path).resolve()
@@ -48,8 +41,6 @@ def lossless_cut_video(
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     # Build FFmpeg command
-    # -ss before -i is extremely fast (jumps directly to target keyframe)
-    # -to can specify end time, but -t specifies duration. We use -t for duration.
     cmd = [
         ffmpeg_exe,
         "-y",
@@ -79,10 +70,42 @@ def lossless_cut_video(
             creationflags=creationflags
         )
         
-        stdout, stderr = process.communicate()
+        # Read stderr line-by-line for progress reporting
+        while True:
+            if cancel_event and cancel_event.is_set():
+                process.terminate()
+                process.wait()
+                raise VideoCutterError("Cắt video bị hủy bởi người dùng.")
+                
+            line = process.stderr.readline()
+            if not isinstance(line, str) or not line:
+                break
+                
+            if log_callback:
+                log_callback(line.strip())
+                
+            # Parse progress time from line: time=00:00:11.72
+            if "time=" in line:
+                try:
+                    time_part = line.split("time=")[1].split()[0]
+                    if ":" in time_part:
+                        h, m, s = time_part.split(":")
+                        secs = int(h) * 3600 + int(m) * 60 + float(s)
+                    else:
+                        secs = float(time_part)
+                    
+                    if duration_sec > 0:
+                        pct = min(100.0, max(0.0, (secs / duration_sec) * 100.0))
+                        if progress_callback:
+                            progress_callback(pct)
+                except Exception:
+                    pass
+                    
+        process.wait()
 
         if process.returncode != 0:
-            err_msg = f"FFmpeg failed with exit code {process.returncode}.\nStderr: {stderr}"
+            remaining_err = process.stderr.read()
+            err_msg = f"FFmpeg failed with exit code {process.returncode}.\nStderr: {remaining_err}"
             if log_callback:
                 log_callback(f"[LỖI] {err_msg}")
             raise VideoCutterError(err_msg)

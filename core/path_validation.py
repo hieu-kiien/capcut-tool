@@ -88,3 +88,31 @@ def validate_project_name(project_name: str, draft_root: Path | str) -> Path:
         raise ValueError("Tên dự án không hợp lệ hoặc cố gắng truy cập ngoài thư mục lưu dự án CapCut.")
         
     return resolved_proj
+
+
+def sanitize_project_name(raw_name: str) -> str:
+    """
+    Sanitize raw string to produce a safe Windows folder project name.
+    Replaces forbidden chars with underscores and strips illegal prefixes/endings.
+    """
+    if not raw_name:
+        return "CapCut_Draft_Project"
+    
+    cleaned = raw_name.strip()
+    for ch in INVALID_WINDOWS_CHARS:
+        cleaned = cleaned.replace(ch, "_")
+    
+    cleaned = re.sub(r'[\x00-\x1f\x7f]', '_', cleaned)
+    cleaned = re.sub(r'\.+', '.', cleaned).strip(" .")
+    
+    if cleaned.startswith("_partial_"):
+        cleaned = cleaned[9:]
+        
+    if not cleaned:
+        cleaned = "CapCut_Draft_Project"
+        
+    if len(cleaned) > MAX_PROJECT_NAME_LENGTH:
+        cleaned = cleaned[:MAX_PROJECT_NAME_LENGTH].rstrip(" .")
+        
+    return cleaned
+

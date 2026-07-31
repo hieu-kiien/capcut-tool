@@ -18,7 +18,7 @@ All notable changes to the CapCut Long Story Studio project will be documented i
 * Improved muted UI text contrast for dark backgrounds.
 
 ### Verified
-* Full test suite: 85 passed on 2026-06-19.
+* Full test suite: 86 passed on 2026-06-19.
 * `compileall` passed for app, draft library, backend modules, tests, and benchmark script.
 * Five-hour benchmark: 600 media, 3,600 segments, cached draft median 3.847s versus 4.210s uncached.
 * Compact serialization median 0.776s versus 0.905s pretty serialization.

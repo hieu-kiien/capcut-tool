@@ -117,7 +117,13 @@ def test_profile_cloning(temp_db):
         name="Source_Profile",
         canvas="9:16",
         clip_min_sec=4.0,
-        logo_path="C:/logo.png"
+        logo_path="C:/logo.png",
+        logo_opacity=0.75,
+        chroma_enabled=True,
+        chroma_mode="custom_blue",
+        chroma_threshold=45,
+        chroma_shadow=5,
+        subtitle_karaoke=True
     )
     
     # Clone
@@ -131,6 +137,12 @@ def test_profile_cloning(temp_db):
     assert clone["canvas"] == "9:16"
     assert clone["clip_min_sec"] == 4.0
     assert clone["logo_path"] == "C:/logo.png"
+    assert clone["logo_opacity"] == 0.75
+    assert clone["chroma_enabled"] == 1
+    assert clone["chroma_mode"] == "custom_blue"
+    assert clone["chroma_threshold"] == 45
+    assert clone["chroma_shadow"] == 5
+    assert clone["subtitle_karaoke"] == 1
     assert clone["version"] == 1
     
     # Try cloning with same name (should fail)
@@ -223,14 +235,14 @@ def test_gui_profile_integration(temp_db):
         assert hasattr(window, "profile_menu"), "profile_menu missing"
         
         # Check slots exist
-        assert hasattr(window, "_save_current_profile"), "_save_current_profile slot missing"
-        assert hasattr(window, "_create_new_profile_click"), "_create_new_profile_click slot missing"
-        assert hasattr(window, "_clone_profile_click"), "_clone_profile_click slot missing"
-        assert hasattr(window, "_rename_profile_click"), "_rename_profile_click slot missing"
-        assert hasattr(window, "_delete_profile_click"), "_delete_profile_click slot missing"
-        assert hasattr(window, "_export_profile_click"), "_export_profile_click slot missing"
-        assert hasattr(window, "_import_profile_click"), "_import_profile_click slot missing"
-        assert hasattr(window, "_rollback_profile_click"), "_rollback_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_save_current_profile"), "_save_current_profile slot missing"
+        assert hasattr(window.profile_controller, "_create_new_profile_click"), "_create_new_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_clone_profile_click"), "_clone_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_rename_profile_click"), "_rename_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_delete_profile_click"), "_delete_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_export_profile_click"), "_export_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_import_profile_click"), "_import_profile_click slot missing"
+        assert hasattr(window.profile_controller, "_rollback_profile_click"), "_rollback_profile_click slot missing"
         
         # Check ScanWorker and scan thread variables exist
         assert hasattr(window, "_scan_thread"), "_scan_thread missing"

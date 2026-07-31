@@ -426,7 +426,22 @@ def _build_scene_ranges_by_path(assets: Sequence[MediaAsset], cfg: VideoMixerCon
     return {}
 
 
+def calculate_bgm_volume(voice_path: Optional[str] = None, voice_duration: float = 0.0, default_volume: float = 1.0) -> float:
+    """
+    Calculates BGM volume with Audio Auto-Ducking (20%).
+    Scales BGM volume factor to 0.20 (20%) when voice narration is present.
+    """
+    if voice_path and (voice_duration > 0 or voice_duration == 0.0):
+        try:
+            if Path(voice_path).exists():
+                return 0.20
+        except Exception:
+            return 0.20
+    return default_volume
+
+
 # SRT parsing methods removed.
 
 
 # Command-line entrypoint deprecated.
+

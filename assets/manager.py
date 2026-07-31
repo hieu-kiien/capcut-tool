@@ -1,9 +1,64 @@
+import os
 import uuid
 import hashlib
 import sqlite3
+import subprocess
 from pathlib import Path
 from core.db import Database
 from media_probe import probe_media
+
+def generate_video_thumbnail(video_path: Path) -> Path | None:
+    """
+    Generates a thumbnail image from a video file at 1.0s using FFmpeg.
+    """
+    from runtime_tools import resolve_ffmpeg
+    ffmpeg_exe = resolve_ffmpeg()
+    if not ffmpeg_exe:
+        return None
+    
+    # Create thumbnail directory
+    thumb_dir = video_path.parent / ".thumbnails"
+    try:
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # Fallback to a central folder in the project root
+        thumb_dir = Path(__file__).resolve().parents[1] / ".thumbnails"
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+        
+    out_name = f"{video_path.stem}_{hashlib.md5(str(video_path).encode('utf-8')).hexdigest()[:8]}.jpg"
+    out_path = thumb_dir / out_name
+    
+    if out_path.exists():
+        return out_path
+        
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-ss", "1.0",
+            "-i", str(video_path),
+            "-vframes", "1",
+            "-q:v", "4",
+            str(out_path)
+        ]
+        res = subprocess.run(cmd, capture_output=True, check=False, creationflags=creationflags)
+        if res.returncode != 0 or not out_path.exists():
+            # Fallback to -ss 0.0 for very short videos
+            cmd = [
+                ffmpeg_exe, "-y",
+                "-ss", "0.0",
+                "-i", str(video_path),
+                "-vframes", "1",
+                "-q:v", "4",
+                str(out_path)
+            ]
+            subprocess.run(cmd, capture_output=True, check=False, creationflags=creationflags)
+            
+        if out_path.exists():
+            return out_path
+    except Exception as e:
+        print(f"Error generating thumbnail for {video_path}: {e}")
+    return None
 
 def get_md5_hash(file_path: str | Path) -> str:
     """
@@ -70,14 +125,21 @@ class AssetManager:
             # Failed to probe
             return None
 
+        # Generate thumbnail for video
+        thumb_path_str = ""
+        if asset_info.media_type == "video":
+            thumb_path = generate_video_thumbnail(path)
+            if thumb_path:
+                thumb_path_str = str(thumb_path.resolve())
+
         # 4. Create new asset record
         asset_id = str(uuid.uuid4())
         cursor.execute(
             """
             INSERT INTO assets (
                 id, path, filename, media_type, duration_us,
-                width, height, fps, tags, category_name, md5_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                width, height, fps, tags, category_name, md5_hash, thumbnail_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 asset_id,
@@ -90,7 +152,8 @@ class AssetManager:
                 asset_info.fps,
                 tags,
                 category_name,
-                md5
+                md5,
+                thumb_path_str
             )
         )
         conn.commit()
@@ -173,3 +236,15 @@ class AssetManager:
         cursor.execute(query, tuple(params))
         conn.commit()
         return cursor.rowcount > 0
+
+    @staticmethod
+    def update_thumbnail_path(asset_id: str, thumbnail_path: str) -> bool:
+        """
+        Updates the cached thumbnail path for an asset.
+        """
+        conn = Database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE assets SET thumbnail_path = ? WHERE id = ?", (thumbnail_path, asset_id))
+        conn.commit()
+        return cursor.rowcount > 0
+

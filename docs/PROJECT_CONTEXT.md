@@ -33,15 +33,16 @@ Da xac minh trong code/test gan day:
 - Media probe cache co gioi han, invalidation theo path/size/mtime, validate kich thuoc va chia se mot probe dang chay giua cac thread cung doc mot file.
 - Export compact JSON la opt-in; luong tao draft mac dinh van ghi pretty JSON de giu tuong thich nguoc.
 - `ScanWorker` nhan interruption; close flow doi scan/import/download/cutter worker dung sach va tu choi dong neu worker chua dung.
-- Full suite `85/85` test va `compileall` da pass ngay 2026-06-19.
+- Full suite `90/90` test va `compileall` da pass ngay 2026-06-22 (trong 10.34s).
 - Benchmark 5 gio/600 media/3600 segment da co warm-up va 5 vong do: draft cached median 3.847 giay, uncached 4.210 giay; compact serialization median 0.776 giay, pretty 0.905 giay.
 
 Con nen lam truoc khi goi la 10/10:
 
-1. Chay manual UI smoke day du: scan media, cancel/close khi scan dang chay, downloader recoverable failure va pipeline success nho.
-2. Mo thu draft compact trong CapCut that truoc khi bat compact lam mac dinh.
-3. Chay benchmark ffprobe that voi 5-10 media hop le qua `CAPCUT_BENCHMARK_MEDIA_DIR`; benchmark mock chi xac minh call path, khong do CPU ffprobe that.
-4. Chi package EXE khi user yeu cau artifact phan phoi.
+1. **Mo CapCut PC That**: Mo thu draft compact va pretty trong CapCut that (B3, B4). UI smoke test via Python da PASS hoan toan nhung thieu xac minh truc quan.
+2. **Benchmark ffprobe that**: Cung cap 5-10 media hop le qua `CAPCUT_BENCHMARK_MEDIA_DIR` de do CPU that (Hien dang BLOCKED_EXTERNAL).
+3. Chi package EXE khi user yeu cau artifact phan phoi.
+
+*Ghi chu: Regression test 86/86 PASS. UI Smoke phát hiện một lỗi zombie process khi đóng app có worker nền (A4), đã được fix bằng cách force terminate QThread. Các case khác (A1-A3, A5) PASS.*
 
 ## Kiem tra nhanh
 

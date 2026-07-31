@@ -2,6 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Dict, Tuple, Any
+from core.logger import logger
+
 
 # Map color mode to RGB and hex for FFmpeg/Pillow
 _OVERLAY_BG_COLORS = {
@@ -46,9 +48,8 @@ def remove_solid_bg_from_image(
                 keep = (dist - threshold) / feather
                 pixels[x, y] = (r, g, b, int(a * keep))
     image.save(output_path)
-    print(f"[CHROMA] Removed {label} background from image overlay: {output_path.name}")
+    logger.info(f"[CHROMA] Removed {mode} background from image overlay: {output_path.name}")
     return output_path
-
 def remove_solid_bg_from_video(
     source_path: Path,
     output_dir: Path,
@@ -56,8 +57,11 @@ def remove_solid_bg_from_video(
     mode: str,
     similarity: float,
     blend: float,
+    cancel_check: Any = None,
 ) -> Path:
     from runtime_tools import resolve_ffmpeg
+    from app.job_control import JobCancelled
+    import time
 
     _, ffmpeg_color, label = _OVERLAY_BG_COLORS.get(mode, ((0, 255, 0), "0x00FF00", "xanh lá"))
     ffmpeg_path = resolve_ffmpeg()
@@ -80,19 +84,46 @@ def remove_solid_bg_from_video(
         str(output_path),
     ]
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    result = subprocess.run(
+    
+    process = subprocess.Popen(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="ignore",
-        check=False,
         creationflags=creationflags,
     )
-    if result.returncode != 0 or not output_path.exists():
-        detail = (result.stderr or result.stdout or "FFmpeg failed").strip()
+    
+    try:
+        while process.poll() is None:
+            if cancel_check and cancel_check():
+                process.terminate()
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                raise JobCancelled("Quy trình xóa nền video đã bị hủy bởi người dùng.")
+            time.sleep(0.1)
+        
+        stdout, stderr = process.communicate()
+        return_code = process.returncode
+    except Exception:
+        if process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2.0)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+        raise
+
+    if return_code != 0 or not output_path.exists():
+        detail = (stderr or stdout or "FFmpeg failed").strip()
         raise RuntimeError(f"Không thể xóa nền {label} khỏi hoạt ảnh: {detail}")
-    print(f"[CHROMA] Removed {label} background from video overlay: {output_path.name}")
+    logger.info(f"[CHROMA] Removed {mode} background from video overlay: {output_path.name}")
     return output_path
 
 def prepare_overlay_asset(
@@ -102,6 +133,7 @@ def prepare_overlay_asset(
     prefix: str,
     similarity: float = 0.18,
     blend: float = 0.08,
+    cancel_check: Any = None,
 ) -> Path:
     source_path = Path(source)
     mode = (bg_mode or "none").strip().lower()
@@ -115,5 +147,5 @@ def prepare_overlay_asset(
     if ext in _IMAGE_OVERLAY_EXTENSIONS:
         return remove_solid_bg_from_image(source_path, output_dir, prefix, mode, similarity, blend)
     if ext in _VIDEO_OVERLAY_EXTENSIONS:
-        return remove_solid_bg_from_video(source_path, output_dir, prefix, mode, similarity, blend)
+        return remove_solid_bg_from_video(source_path, output_dir, prefix, mode, similarity, blend, cancel_check=cancel_check)
     raise RuntimeError(f"Không hỗ trợ xóa nền cho định dạng overlay: {ext or '(không rõ)'}")

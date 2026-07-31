@@ -181,16 +181,19 @@ class ProfileManager:
                 id, name, canvas, clip_min_sec, clip_max_sec, selection_mode,
                 short_video_mode, recursive_scan, subtitle_style_json,
                 auto_keyframe, auto_transition, auto_transition_duration,
-                logo_path, logo_position, logo_scale, anim_path, anim_position,
-                anim_scale, anim_timing, bgm_path, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                logo_path, logo_position, logo_scale, logo_opacity, anim_path, anim_position,
+                anim_scale, anim_timing, bgm_path, chroma_enabled, chroma_mode,
+                chroma_threshold, chroma_shadow, subtitle_karaoke, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_id, new_name, current["canvas"], current["clip_min_sec"], current["clip_max_sec"], current["selection_mode"],
                 current["short_video_mode"], current["recursive_scan"], current["subtitle_style_json"],
                 current["auto_keyframe"], current["auto_transition"], current["auto_transition_duration"],
-                current["logo_path"], current["logo_position"], current["logo_scale"], current["anim_path"], current["anim_position"],
-                current["anim_scale"], current["anim_timing"], current["bgm_path"], 1
+                current["logo_path"], current["logo_position"], current["logo_scale"], current["logo_opacity"], current["anim_path"], current["anim_position"],
+                current["anim_scale"], current["anim_timing"], current["bgm_path"], 
+                current["chroma_enabled"], current["chroma_mode"], current["chroma_threshold"], current["chroma_shadow"],
+                current["subtitle_karaoke"], 1
             )
         )
         conn.commit()

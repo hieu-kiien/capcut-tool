@@ -34,13 +34,13 @@ def _hold_draft_lock_child(project_path: str, ready, release, errors) -> None:
 
 def test_video_mixer_ranges():
     print("Testing video_mixer with target_ranges...")
-    
+
     # 1. Create dummy assets
     assets = [
         MediaAsset(path="video1.mp4", media_type="video", duration_us=10_000_000, width=1920, height=1080),
         MediaAsset(path="video2.mp4", media_type="video", duration_us=15_000_000, width=1920, height=1080)
     ]
-    
+
     # 2. Define custom ranges
     target_ranges = [
         (0, 3_000_000),      # Subtitle 1: 3 seconds
@@ -48,22 +48,22 @@ def test_video_mixer_ranges():
         (7_500_000, 5_000_000)   # Subtitle 3: 5 seconds
     ]
     total_duration_us = 12_500_000
-    
+
     # 3. Call planner
     segments = video_mixer.plan_background_segments(
         assets=assets,
         total_duration_us=total_duration_us,
         target_ranges=target_ranges
     )
-    
+
     assert len(segments) == len(target_ranges), f"Expected {len(target_ranges)} segments, got {len(segments)}"
-    
+
     for i, seg in enumerate(segments):
         expected_start, expected_duration = target_ranges[i]
         assert seg.target_start_us == expected_start, f"Segment {i} start mismatch"
         assert seg.target_duration_us == expected_duration, f"Segment {i} duration mismatch"
         print(f"  Segment {i}: start={seg.target_start_us/1e6:.1f}s, duration={seg.target_duration_us/1e6:.1f}s, file={Path(seg.path).name}")
-        
+
     print("[OK] video_mixer target_ranges test passed!")
 
 def test_create_draft_signature():
@@ -71,82 +71,167 @@ def test_create_draft_signature():
     import inspect
     sig = inspect.signature(capcut_draft_creator.create_draft_from_files)
     params = sig.parameters
-    
+
     assert "subtitle_font_size" in params
     assert "subtitle_color" in params
     assert "subtitle_bold" in params
     assert "subtitle_outline_width" in params
     assert "subtitle_shadow_alpha" in params
     assert "subtitle_shadow_distance" in params
-    
+
     print("  Custom subtitle parameters successfully verified in signature:")
     for name in ["subtitle_font_size", "subtitle_color", "subtitle_bold", "subtitle_outline_width", "subtitle_shadow_alpha", "subtitle_shadow_distance"]:
         print(f"    - {name}: default={params[name].default}")
-        
+
     print("[OK] capcut_draft_creator signature test passed!")
 
 def test_gui_splitter_widgets():
-    print("Testing GUI splitter widgets and slot existence...")
-    
+    print("Testing GUI cutter/splitter widgets and slots...")
+
     # Initialize a dummy QApplication for PySide6 widgets
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtCore import QThread
     app = QApplication.instance() or QApplication([])
-    
+
     from app.gui import MainWindow
     window = MainWindow()
-    
-    # Check widgets are defined
-    assert hasattr(window, "split_source_edit"), "split_source_edit missing from MainWindow"
-    assert hasattr(window, "split_time_spin"), "split_time_spin missing from MainWindow"
-    assert hasattr(window, "split_out_edit"), "split_out_edit missing from MainWindow"
-    assert hasattr(window, "btn_run_split"), "btn_run_split missing from MainWindow"
-    
-    # Check slots exist
-    assert hasattr(window, "_browse_split_source_click"), "_browse_split_source_click slot missing"
-    assert hasattr(window, "_browse_split_out_click"), "_browse_split_out_click slot missing"
-    assert hasattr(window, "_run_split_click"), "_run_split_click slot missing"
-    assert hasattr(window, "_on_media_dir_changed"), "_on_media_dir_changed slot missing"
-    
-    print("[OK] GUI splitter widgets and slots successfully verified!")
+
+    # Check widgets are defined inside window.media_studio_widget
+    studio = window.media_studio_widget
+    assert hasattr(studio, "cutter_source_edit"), "cutter_source_edit missing from MediaStudioWidget"
+    assert hasattr(studio, "cutter_dest_edit"), "cutter_dest_edit missing from MediaStudioWidget"
+    assert hasattr(studio, "cutter_start_spin"), "cutter_start_spin missing from MediaStudioWidget"
+    assert hasattr(studio, "cutter_duration_spin"), "cutter_duration_spin missing from MediaStudioWidget"
+    assert hasattr(studio, "btn_run_cut"), "btn_run_cut missing from MediaStudioWidget"
+
+    # Verify parent relationships
+    assert studio.cutter_source_edit.parent() is not None, "cutter_source_edit has no parent"
+    assert studio.cutter_dest_edit.parent() is not None, "cutter_dest_edit has no parent"
+    assert studio.cutter_start_spin.parent() is not None, "cutter_start_spin has no parent"
+    assert studio.cutter_duration_spin.parent() is not None, "cutter_duration_spin has no parent"
+    assert studio.btn_run_cut.parent() is not None, "btn_run_cut has no parent"
+
+    # Verify visibility: not hidden (they should not be hidden unless explicitly set)
+    assert not studio.cutter_source_edit.isHidden()
+    assert not studio.cutter_dest_edit.isHidden()
+    assert not studio.cutter_start_spin.isHidden()
+    assert not studio.cutter_duration_spin.isHidden()
+    assert not studio.btn_run_cut.isHidden()
+
+    # Verify signal connection: btn_run_cut.clicked should invoke _on_start_cutting
+    from unittest.mock import MagicMock, patch
+
+    # We patch _on_start_cutting to verify the button click signal connection
+    with patch.object(studio, "_on_start_cutting") as mock_start:
+        studio.btn_run_cut.click()
+        mock_start.assert_called_once()
+
+    # Verify input validation behavior: prompts warning on empty/invalid input
+    warnings = []
+    def mock_warning(parent, title, text):
+        warnings.append((title, text))
+
+    with patch.object(QMessageBox, "warning", side_effect=mock_warning):
+        # 1. Source edit is empty
+        studio.cutter_source_edit.setText("")
+        studio.cutter_dest_edit.setText("dest.mp4")
+        studio._on_start_cutting()
+        assert len(warnings) == 1
+        assert "nguồn hợp lệ" in warnings[-1][1]
+
+        # 2. Source file path doesn't exist
+        studio.cutter_source_edit.setText("non_existent_file.mp4")
+        studio._on_start_cutting()
+        assert len(warnings) == 2
+        assert "nguồn hợp lệ" in warnings[-1][1]
+
+        # Mock os.path.exists to return True for our fake source file
+        with patch("os.path.exists", return_value=True):
+            # 3. Source exists but destination is empty
+            studio.cutter_source_edit.setText("fake_source.mp4")
+            studio.cutter_dest_edit.setText("")
+            studio._on_start_cutting()
+            assert len(warnings) == 3
+            assert "nơi lưu" in warnings[-1][1]
+
+            # 4. Duration is <= 0
+            # Let's set a valid destination but duration <= 0
+            studio.cutter_dest_edit.setText("dest.mp4")
+            studio.cutter_duration_spin.setRange(0.0, 999999.0)
+            studio.cutter_duration_spin.setValue(0.0)
+            studio._on_start_cutting()
+            assert len(warnings) == 4
+            assert "lớn hơn 0" in warnings[-1][1]
+
+            # Verify worker invocation
+            # Restore duration and range to valid values
+            studio.cutter_duration_spin.setRange(0.1, 999999.0)
+            studio.cutter_duration_spin.setValue(5.0)
+
+            # Mock CutterWorker to prevent real thread and FFmpeg execution
+            from app.widgets.media_studio_widget import CutterWorker
+
+            mock_worker = MagicMock(spec=CutterWorker)
+
+            with patch("app.widgets.media_studio_widget.CutterWorker", return_value=mock_worker) as mock_worker_class:
+                studio._on_start_cutting()
+                mock_worker_class.assert_called_once()
+                mock_worker.start.assert_called_once()
+
+    # Verify worker cancellation / shutdown
+    # If the worker is running, window shutdown should request interruption and cancel it
+    mock_worker_running = MagicMock(spec=QThread)
+    mock_worker_running.isRunning.return_value = True
+
+    # Set the running worker on the studio
+    studio.cutter_worker = mock_worker_running
+
+    # Call shutdown
+    studio.shutdown(wait_ms=0)
+
+    # Check that requestInterruption was called on the running worker
+    mock_worker_running.requestInterruption.assert_called_once()
+
+    print("[OK] Real GUI cutter controls and validation successfully verified!")
 
 def test_project_name_validation():
     print("Testing project name validation...")
-    from app.path_validation import validate_project_name
-    
+    from core.path_validation import validate_project_name
+
     draft_root = Path("C:/projects/drafts")
-    
+
     # 1. Valid project name
     res = validate_project_name("My_Project", draft_root)
     assert res == (draft_root / "My_Project").resolve()
-    
+
     # 2. Empty name
     try:
         validate_project_name("", draft_root)
         assert False, "Should raise ValueError for empty name"
     except ValueError:
         pass
-        
+
     # 3. Path traversal
     try:
         validate_project_name("../OtherFolder", draft_root)
         assert False, "Should raise ValueError for path traversal"
     except ValueError:
         pass
-        
+
     # 4. Invalid separator
     try:
         validate_project_name("abc/def", draft_root)
         assert False, "Should raise ValueError for separator"
     except ValueError:
         pass
-        
+
     # 5. Invalid characters
     try:
         validate_project_name("abc*def", draft_root)
         assert False, "Should raise ValueError for asterisks"
     except ValueError:
         pass
-        
+
     print("[OK] Project name validation tests passed!")
 
 def test_transition_track_targeting():
@@ -154,11 +239,11 @@ def test_transition_track_targeting():
     import tempfile
     import json
     import capcut_keyframe_tool as kt
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         draft_file = tmp_path / "draft_content.json"
-        
+
         # Create a mock draft content with 3 video tracks
         mock_draft = {
             "materials": {
@@ -196,9 +281,9 @@ def test_transition_track_targeting():
                 }
             ]
         }
-        
+
         draft_file.write_text(json.dumps(mock_draft), encoding="utf-8")
-        
+
         class DummyArgs:
             def __init__(self):
                 self.segment_type = "video"
@@ -207,58 +292,58 @@ def test_transition_track_targeting():
                 self.root = tmp_path
                 self.transition_duration_sec = 0.4
                 self.transition_apply_all = False
-                
+
         presets = [{"name": "Mix", "duration": 400000}]
-        
+
         # Run transition applier
         changed = kt.apply_random_transitions_to_file(draft_file, DummyArgs(), presets)
-        
+
         # Load modified content
         data = json.loads(draft_file.read_text(encoding="utf-8"))
         tracks = data["tracks"]
-        
+
         # Assertions
         # Background track should have transition refs on segment 0 and 1
         bg_segs = tracks[0]["segments"]
         assert len(bg_segs[0].get("extra_material_refs", [])) > 0, "First background segment should have transition ref"
         assert len(bg_segs[1].get("extra_material_refs", [])) > 0, "Second background segment should have transition ref"
         assert len(bg_segs[2].get("extra_material_refs", [])) == 0, "Last background segment should not have transition ref"
-        
+
         # Logo track should not have transitions
         logo_segs = tracks[1]["segments"]
         assert len(logo_segs[0].get("extra_material_refs", [])) == 0, "Logo track should not have transitions"
-        
+
         # Anim track should not have transitions
         anim_segs = tracks[2]["segments"]
         assert len(anim_segs[0].get("extra_material_refs", [])) == 0, "Anim track should not have transitions"
         assert len(anim_segs[1].get("extra_material_refs", [])) == 0, "Anim track should not have transitions"
-        
+
         print("[OK] Transition track targeting tests passed!")
 
 def test_draft_folder_remove_traversal():
     print("Testing DraftFolder remove path traversal protection...")
     import tempfile
     import pyJianYingDraft as draft
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         draft_root = tmp_path / "draft_root"
         draft_root.mkdir()
-        
+
         # Create an outside folder that represents a "victim" directory
         outside_victim = tmp_path / "outside_victim"
         outside_victim.mkdir()
         (outside_victim / "secret.txt").write_text("sensitive data", encoding="utf-8")
-        
+
         df = draft.DraftFolder(str(draft_root))
-        
+
         # Verify remove rejects traversal
         try:
             df.remove("../outside_victim")
             assert False, "Should raise ValueError for path traversal in remove"
         except ValueError:
             pass
-            
+
         # Assert the outside directory was NOT deleted
         assert outside_victim.exists(), "Outside folder was deleted by traversal in remove!"
         assert (outside_victim / "secret.txt").exists(), "Outside files were deleted!"
@@ -268,27 +353,27 @@ def test_draft_folder_duplicate_traversal():
     print("Testing DraftFolder duplicate_as_template path traversal protection...")
     import tempfile
     import pyJianYingDraft as draft
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         draft_root = tmp_path / "draft_root"
         draft_root.mkdir()
-        
+
         # Create a mock template inside draft_root
         template_name = "mock_template"
         template_path = draft_root / template_name
         template_path.mkdir()
         (template_path / "draft_content.json").write_text("{}", encoding="utf-8")
-        
+
         df = draft.DraftFolder(str(draft_root))
-        
+
         # Verify duplicate_as_template rejects traversal destination
         try:
             df.duplicate_as_template(template_name, "../outside_copy")
             assert False, "Should raise ValueError for path traversal in duplicate"
         except ValueError:
             pass
-            
+
         # Assert the outside copy was not created
         outside_copy = draft_root.parent / "outside_copy"
         assert not outside_copy.exists(), "Outside copy was created in duplicate traversal!"
@@ -299,17 +384,17 @@ def test_media_probe_no_fallback_on_timeout():
     import media_probe
     import subprocess
     import tempfile
-    
+
     # Mock resolve_ffprobe to return a dummy path
     orig_resolve_ffprobe = media_probe.resolve_ffprobe
     media_probe.resolve_ffprobe = lambda: "dummy_ffprobe"
-    
+
     # Mock subprocess.run to raise subprocess.TimeoutExpired
     orig_run = media_probe.subprocess.run
     def mock_run(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=15)
     media_probe.subprocess.run = mock_run
-    
+
     # Mock _probe_with_pymediainfo to record if it was called
     pymediainfo_called = False
     orig_pymediainfo = media_probe._probe_with_pymediainfo
@@ -318,10 +403,10 @@ def test_media_probe_no_fallback_on_timeout():
         pymediainfo_called = True
         return media_probe.MediaAsset(str(path), "unknown", 0)
     media_probe._probe_with_pymediainfo = mock_pymediainfo
-    
+
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
         tmp_file_path = tmp_file.name
-        
+
     try:
         asset = media_probe.probe_media(tmp_file_path, timeout_sec=15)
         # Assert timeout error is captured
@@ -344,11 +429,11 @@ def test_transition_strict_targeting():
     import tempfile
     import json
     import capcut_keyframe_tool as kt
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         draft_file = tmp_path / "draft_content.json"
-        
+
         # Mock draft with NO long_story_background track, but has other video tracks
         mock_draft = {
             "materials": {
@@ -368,9 +453,9 @@ def test_transition_strict_targeting():
                 }
             ]
         }
-        
+
         draft_file.write_text(json.dumps(mock_draft), encoding="utf-8")
-        
+
         class DummyArgs:
             def __init__(self):
                 self.segment_type = "video"
@@ -380,18 +465,18 @@ def test_transition_strict_targeting():
                 self.transition_duration_sec = 0.4
                 self.transition_apply_all = False
                 self.transition_allow_primary_fallback = False # Strict targeting
-                
+
         presets = [{"name": "Mix", "duration": 400000}]
-        
+
         changed = kt.apply_random_transitions_to_file(draft_file, DummyArgs(), presets)
-        
+
         # Assertions
         assert changed == 0, f"Expected 0 changes, got {changed}"
-        
+
         data = json.loads(draft_file.read_text(encoding="utf-8"))
         assert len(data["materials"].get("transitions", [])) == 0, "Transitions were added to materials!"
         assert "extra_material_refs" not in data["tracks"][0]["segments"][0], "Transitions were applied!"
-        
+
         print("[OK] Strict transition targeting verified!")
 
 
@@ -462,22 +547,22 @@ def test_draft_folder_duplicate_cleanup():
     print("Testing DraftFolder duplicate_as_template load failure cleanup...")
     import tempfile
     import pyJianYingDraft as draft
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         draft_root = tmp_path / "draft_root"
         draft_root.mkdir()
-        
+
         # Create a mock BAD template inside draft_root with invalid/empty draft_content.json (which raises KeyError)
         template_name = "bad_template"
         template_path = draft_root / template_name
         template_path.mkdir()
-        
+
         (template_path / "draft_content.json").write_text("{}", encoding="utf-8")
         (template_path / "draft_meta_info.json").write_text("{}", encoding="utf-8")
-        
+
         df = draft.DraftFolder(str(draft_root))
-        
+
         # Verify duplicate_as_template raises KeyError/Exception
         new_copy_name = "failed_copy"
         try:
@@ -487,7 +572,7 @@ def test_draft_folder_duplicate_cleanup():
             print(f"  Caught expected KeyError: {e}")
         except Exception as e:
             print(f"  Caught expected exception: {type(e).__name__}: {e}")
-            
+
         # Assert that the new copy folder does NOT exist anymore (cleaned up)
         new_copy_path = draft_root / new_copy_name
         assert not new_copy_path.exists(), "Corrupt destination copy folder was not cleaned up!"
@@ -496,24 +581,24 @@ def test_draft_folder_duplicate_cleanup():
 def test_ytdlp_downloader_security_validation():
     print("Testing yt-dlp downloader security and URL validation...")
     from app.downloader import _validate_url, parse_url_list
-    
+
     # Valid URLs
     assert _validate_url("https://youtube.com/watch?v=123") == "https://youtube.com/watch?v=123"
     # YouTube URLs with multiple query parameters should be valid
     assert _validate_url("https://youtube.com/watch?v=abc&list=xyz") == "https://youtube.com/watch?v=abc&list=xyz"
     assert _validate_url("https://youtube.com/watch?v=abc&list=xyz&index=1") == "https://youtube.com/watch?v=abc&list=xyz&index=1"
     assert _validate_url("https://www.youtube.com/watch?v=abc&list=PL123&index=2") == "https://www.youtube.com/watch?v=abc&list=PL123&index=2"
-    
+
     # Regular URL with query parameters and URL encoding
     assert _validate_url("https://example.com/path?a=1&b=two%20words") == "https://example.com/path?a=1&b=two%20words"
-    
+
     # Reject file://
     try:
         _validate_url("file:///etc/passwd")
         assert False, "Should reject file scheme"
     except ValueError:
         print("  Successfully rejected invalid scheme")
-        
+
     # Reject command injection characters and control chars (newlines, null bytes, etc.)
     bad_urls = [
         "https://youtube.com/watch?v=123; rm -rf /",
@@ -532,7 +617,7 @@ def test_ytdlp_downloader_security_validation():
             assert False, f"Should reject dangerous URL: {bad}"
         except ValueError as e:
             pass
-            
+
     print("[OK] Downloader security validation tests passed!")
 
 
@@ -540,19 +625,19 @@ def test_config_no_urls():
     print("Testing config.json doesn't save downloader URL list...")
     from app.gui import MainWindow
     from PySide6.QtWidgets import QApplication
-    
+
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
-    
+
     window.download_urls_edit.setPlainText("https://youtube.com/watch?v=abc\nhttps://youtube.com/watch?v=def")
     window._save_config()
-    
+
     import json
     from app.gui import CONFIG_PATH
-    
+
     assert CONFIG_PATH.exists()
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    
+
     for key, value in cfg.items():
         if isinstance(value, str):
             assert "youtube.com" not in value, f"URL list should not be saved in config under key: {key}"
@@ -560,19 +645,19 @@ def test_config_no_urls():
             for val in value:
                 if isinstance(val, str):
                     assert "youtube.com" not in val, "URL list should not be saved in config"
-                    
+
     print("[OK] Config URL exclusion test passed!")
 
 
 def test_downloader_queue_runner_simulation():
     print("Testing downloader queue runner simulation...")
     from app.downloader import YtDlpDownloadRunner, DownloadOptions, DownloadItemResult
-    
+
     runner = YtDlpDownloadRunner()
-    
+
     import subprocess
     orig_popen = subprocess.Popen
-    
+
     class MockProcess:
         def __init__(self, *args, **kwargs):
             self.stdout = [
@@ -582,10 +667,10 @@ def test_downloader_queue_runner_simulation():
                 "[download] 100% of 10.00MiB\n",
             ]
             self.returncode = 0
-            
+
         def poll(self):
             return self.returncode
-            
+
         def wait(self, timeout=None):
             return self.returncode
 
@@ -594,9 +679,9 @@ def test_downloader_queue_runner_simulation():
 
         def kill(self):
             self.returncode = -9
-            
+
     subprocess.Popen = MockProcess
-    
+
     try:
         import tempfile
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -605,34 +690,34 @@ def test_downloader_queue_runner_simulation():
                 output_dir=tmp_dir,
                 workers=1,
             )
-            
+
             progress_events = []
             item_progress_events = []
-            
+
             def log_cb(msg):
                 progress_events.append(msg)
-                
+
             def item_progress_cb(index, status, message, output_path, error):
                 item_progress_events.append((index, status, message, output_path, error))
-                
+
             summary = runner.run(options, progress=log_cb, item_progress=item_progress_cb)
-            
+
             assert summary.total == 1
             assert summary.succeeded == 1
             assert len(summary.results) == 1
-            
+
             res = summary.results[0]
             assert res.url == "https://youtube.com/watch?v=simulated1"
             assert res.status == "completed"
             assert res.output_path == "mock_output_video.mp4"
-            
+
             assert len(item_progress_events) > 0
             last_event = item_progress_events[-1]
             assert last_event[0] == 0
             assert last_event[1] == "completed"
             assert last_event[2] == "100%"
             assert last_event[3] == "mock_output_video.mp4"
-            
+
             print("[OK] Downloader queue runner simulation passed!")
     finally:
         subprocess.Popen = orig_popen
@@ -671,17 +756,17 @@ def test_history_file_io():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-        
+
         # Test basic write
         job_data1 = {"status": "success", "inputs": {"url": "https://example.com"}}
         file1 = write_job_history("download", job_data1, tmp_path)
-        
+
         assert file1.exists()
-        
+
         # Test overwrite/collision avoidance
         job_data2 = {"status": "failed", "inputs": {"url": "https://example.org"}}
         file2 = write_job_history("download", job_data2, tmp_path)
-        
+
         assert file2.exists()
         assert file1 != file2  # Paths must be distinct!
 
@@ -710,13 +795,13 @@ def test_gallerydl_resolver_and_command():
     # 1. Test resolver mock environment variables
     import os
     import tempfile
-    
+
     with tempfile.NamedTemporaryFile(suffix="-gallery-dl.exe", delete=False) as tmp_file:
         fake_path = Path(tmp_file.name).resolve()
-        
+
     orig_env = os.environ.get("CAPCUT_TOOL_GALLERYDL")
     os.environ["CAPCUT_TOOL_GALLERYDL"] = str(fake_path)
-    
+
     try:
         runtime_tools._resolve_tool.cache_clear()
         resolved = runtime_tools.resolve_gallerydl()
@@ -775,7 +860,7 @@ def test_gallerydl_resolver_and_command():
 
 def test_windows_reserved_names():
     print("Testing Windows reserved project names and edge constraints...")
-    from app.path_validation import validate_project_name
+    from core.path_validation import validate_project_name
     draft_root = Path("C:/projects/drafts")
 
     # Reserved words
@@ -1104,7 +1189,7 @@ def test_downloader_ui_options_settings():
             assert options.output_dir == tmp_dir
             assert options.url_tools == ["yt-dlp"]
         finally:
-            window.close()
+            window.deleteLater()
 
     print("[OK] Downloader UI settings are passed to DownloadOptions.")
 
@@ -1114,28 +1199,160 @@ def test_scan_worker_cancel():
     import tempfile
     from pathlib import Path
     from app.gui import ScanWorker
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         for i in range(10):
             (tmp_path / f"test_{i}.mp4").write_text("dummy")
-            
+
         worker = ScanWorker(tmp_path)
-        
+
         assert not worker.cancel_requested
         worker.cancel()
         assert worker.cancel_requested
-        
+
         captured_result = {}
         def handle_finished(res):
             nonlocal captured_result
             captured_result = res
-            
+
         worker.finished.connect(handle_finished)
         worker.run()
-        
+
         assert captured_result.get("cancelled") is True
         print("[OK] ScanWorker cancel logic verified.")
+
+
+def test_audio_auto_ducking():
+    print("Testing Audio Auto-Ducking (20%)...")
+    import tempfile
+    import video_mixer
+    from capcut_draft_creator import calculate_bgm_volume
+
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        voice_file = tmp.name
+
+    try:
+        # 1. Voice present -> volume scaled to 0.20 (20%)
+        vol_with_voice = video_mixer.calculate_bgm_volume(voice_file, voice_duration=5.0)
+        assert vol_with_voice == 0.20, f"Expected 0.20 BGM volume with voice present, got {vol_with_voice}"
+
+        # 2. Voice absent -> volume 1.0 (100%)
+        vol_no_voice = video_mixer.calculate_bgm_volume(None, voice_duration=0.0)
+        assert vol_no_voice == 1.0, f"Expected 1.0 BGM volume without voice, got {vol_no_voice}"
+
+        vol_nonexistent = video_mixer.calculate_bgm_volume("non_existent_voice.mp3", voice_duration=5.0)
+        assert vol_nonexistent == 1.0, f"Expected 1.0 BGM volume for non-existent file, got {vol_nonexistent}"
+    finally:
+        try:
+            os.unlink(voice_file)
+        except Exception:
+            pass
+
+    print("[OK] Audio Auto-Ducking (20%) verified successfully!")
+
+
+def test_subtitle_auto_wrapping():
+    print("Testing Subtitle Auto-Wrap (>8 words)...")
+    from capcut_draft_creator import auto_wrap_subtitle, parse_srt
+    import tempfile
+
+    # Short sentence (<= 8 words) -> No wrap
+    short_txt = "Đây là một câu ngắn gọn"
+    wrapped_short = auto_wrap_subtitle(short_txt, max_words=8)
+    assert "\n" not in wrapped_short
+    assert wrapped_short == short_txt
+
+    # Long sentence (> 8 words) -> Wrapped into 2 lines
+    long_txt = "Một hai ba bốn năm sáu bảy tám chín mười mười một"
+    wrapped_long = auto_wrap_subtitle(long_txt, max_words=8)
+    assert "\n" in wrapped_long
+    lines = wrapped_long.split("\n")
+    assert len(lines) == 2, f"Expected 2 lines for 11-word sentence, got {len(lines)}"
+    assert lines[0] == "Một hai ba bốn năm sáu"
+    assert lines[1] == "bảy tám chín mười mười một"
+
+    # Test via parse_srt file I/O
+    with tempfile.NamedTemporaryFile(suffix=".srt", mode="w", encoding="utf-8", delete=False) as f:
+        f.write("1\n00:00:00,000 --> 00:00:03,000\n" + long_txt + "\n\n")
+        srt_path = f.name
+
+    try:
+        parsed = parse_srt(srt_path)
+        assert len(parsed) == 1
+        assert "\n" in parsed[0]["text"]
+        assert parsed[0]["text"] == wrapped_long
+    finally:
+        try:
+            os.unlink(srt_path)
+        except Exception:
+            pass
+
+    print("[OK] Subtitle Auto-Wrap (>8 words) verified successfully!")
+
+
+def test_keyframe_padding_offset():
+    print("Testing Keyframe Padding Offset (0.3s)...")
+    import capcut_keyframe_tool as kt
+
+    assert kt.KEYFRAME_PADDING_OFFSET_US == 300_000, f"Expected 300,000 us padding, got {kt.KEYFRAME_PADDING_OFFSET_US}"
+
+    op = {"from": 1.0, "to": 1.2, "property": "scale_uniform"}
+    duration_us = 5_000_000  # 5 seconds
+    kfl = kt._build_keyframe_list_for_op(op, duration_us, {}, None, "KFTypeScaleX", [op])
+
+    assert len(kfl) == 2
+    assert kfl[0]["time_offset"] == 300_000, f"Start keyframe offset should be 300,000 us (0.3s), got {kfl[0]['time_offset']}"
+    assert kfl[1]["time_offset"] == 4_700_000, f"End keyframe offset should be 4,700,000 us (5s - 0.3s), got {kfl[1]['time_offset']}"
+
+    print("[OK] Keyframe Padding Offset (0.3s) verified successfully!")
+
+
+def test_gui_clean_exit_shutdown():
+    print("Testing MainWindow clean thread shutdown on exit...")
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QThread
+    from unittest.mock import MagicMock
+
+    app = QApplication.instance() or QApplication([])
+    from app.gui import MainWindow
+
+    window = MainWindow()
+
+    # Create mock active thread
+    mock_thread = MagicMock(spec=QThread)
+    mock_thread.isRunning.return_value = True
+    mock_thread.wait.return_value = True
+
+    window.thread = mock_thread
+    window.worker = MagicMock()
+
+    # Run _request_worker_shutdown
+    res = window._request_worker_shutdown()
+
+    assert res is True
+    mock_thread.requestInterruption.assert_called_once()
+    mock_thread.quit.assert_called_once()
+    mock_thread.wait.assert_called()
+
+    # Test thread timeout -> fallback terminate
+    mock_thread_stuck = MagicMock(spec=QThread)
+    mock_thread_stuck.isRunning.return_value = True
+    mock_thread_stuck.wait.return_value = False  # Timeout!
+
+    window.thread = mock_thread_stuck
+    res_stuck = window._request_worker_shutdown()
+
+    assert res_stuck is True
+    mock_thread_stuck.requestInterruption.assert_called_once()
+    mock_thread_stuck.quit.assert_called_once()
+    mock_thread_stuck.terminate.assert_called_once()
+
+    window.thread = None
+    window.worker = None
+    window.deleteLater()
+
+    print("[OK] MainWindow clean thread shutdown on exit verified successfully!")
 
 
 if __name__ == "__main__":
@@ -1192,8 +1409,17 @@ if __name__ == "__main__":
         print("-" * 50)
         test_scan_worker_cancel()
         print("-" * 50)
+        test_audio_auto_ducking()
+        print("-" * 50)
+        test_subtitle_auto_wrapping()
+        print("-" * 50)
+        test_keyframe_padding_offset()
+        print("-" * 50)
+        test_gui_clean_exit_shutdown()
+        print("-" * 50)
         print("ALL TESTS COMPLETED SUCCESSFULLY!")
     except Exception as e:
         import traceback
         traceback.print_exc()
         sys.exit(1)
+

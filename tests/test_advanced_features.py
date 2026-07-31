@@ -27,26 +27,26 @@ def test_custom_preset_sqlite():
     # 1. Load initial presets - should be equal to KEYFRAME_PRESETS
     initial = load_all_presets()
     assert len(initial) == len(KEYFRAME_PRESETS)
-    
+
     # 2. Add custom preset
     ops = [{"property": "scale_uniform", "from": 100.0, "to": 115.0}]
     preset_id = add_custom_preset("Test Custom 1", "media", ops)
     assert preset_id.startswith("custom_")
-    
+
     # 3. Load presets again - should include custom preset
     current = load_all_presets()
     assert len(current) == len(KEYFRAME_PRESETS) + 1
-    
+
     custom_loaded = [p for p in current if p["id"] == preset_id]
     assert len(custom_loaded) == 1
     assert custom_loaded[0]["name"] == "[Tự chế] Test Custom 1"
     assert custom_loaded[0]["segment"] == "media"
     assert custom_loaded[0]["operations"] == ops
-    
+
     # 4. Delete custom preset
     deleted = delete_custom_preset(preset_id)
     assert deleted is True
-    
+
     # 5. Load presets again - should revert to original length
     after_delete = load_all_presets()
     assert len(after_delete) == len(KEYFRAME_PRESETS)
@@ -67,7 +67,7 @@ def test_intro_outro_timeline_shift(tmp_path, monkeypatch):
     logo_file.write_text("dummy_logo")
     anim_file = tmp_path / "anim.mp4"
     anim_file.write_text("dummy_anim")
-    
+
     srt_file = tmp_path / "subtitles.srt"
     srt_content = (
         "1\n"
@@ -107,7 +107,7 @@ def test_intro_outro_timeline_shift(tmp_path, monkeypatch):
 
     # Áp dụng mock
     monkeypatch.setattr(media_probe, "probe_media", mock_probe_media)
-    
+
     # We create a dummy bg segment
     from video_mixer import BackgroundSegment
     bg_segments = [
@@ -130,23 +130,23 @@ def test_intro_outro_timeline_shift(tmp_path, monkeypatch):
             asset_index=1
         )
     ]
-    
+
     # Mocking pyJianYingDraft classes: VideoMaterial, AudioMaterial, TextSegment, TextStyle, VideoSegment, trange
     # to inspect segments being added
     added_segments = {}
-    
+
     import pyJianYingDraft as draft
-    
+
     original_add_segment = draft.ScriptFile.add_segment
     def mock_add_segment(self_script, segment, track_name):
         added_segments.setdefault(track_name, []).append(segment)
         return original_add_segment(self_script, segment, track_name)
-        
+
     monkeypatch.setattr(draft.ScriptFile, "add_segment", mock_add_segment)
-    
+
     draft_root = tmp_path / "CapCutDrafts"
     draft_root.mkdir()
-    
+
     # Run creation
     res = draft_creator.create_draft_from_files(
         draft_root=draft_root,
@@ -164,52 +164,52 @@ def test_intro_outro_timeline_shift(tmp_path, monkeypatch):
         anim_scale=30.0,
         anim_timing="end"
     )
-    
+
     assert res is not None
     assert res["voice_duration_sec"] == 10.0
-    
+
     # Verify shifts:
     # intro_duration = 3_000_000 (3s)
     # voice_duration = 10_000_000 (10s)
     # outro_duration = 2_000_000 (2s)
-    
+
     # 1. Voice track: should start at 3,000,000
     voice_segs = added_segments.get("long_story_voice", [])
     assert len(voice_segs) == 1
     assert voice_segs[0].target_timerange.start == 3_000_000
     assert voice_segs[0].target_timerange.duration == 10_000_000
-    
+
     # 2. Background track (long_story_background):
     # First clip is Intro: start 0, dur 3,000,000
     # Next are background segments, shifted by 3,000,000
     # Last clip is Outro: start 13,000,000 (3M intro + 10M voice), dur 2,000,000
     bg_segs = added_segments.get("long_story_background", [])
     assert len(bg_segs) == 4 # Intro + 2 main + Outro
-    
+
     # Intro
     assert bg_segs[0].target_timerange.start == 0
     assert bg_segs[0].target_timerange.duration == 3_000_000
-    
+
     # Main segments
     assert bg_segs[1].target_timerange.start == 3_000_000
     assert bg_segs[2].target_timerange.start == 8_000_000
-    
+
     # Outro
     assert bg_segs[3].target_timerange.start == 13_000_000
     assert bg_segs[3].target_timerange.duration == 2_000_000
-    
+
     # 3. Subtitles (long_story_subtitles):
     # srt 1: 1.0s -> 3.5s (1M -> 3.5M) -> shifted to 4M -> 6.5M
     sub_segs = added_segments.get("long_story_subtitles", [])
     assert len(sub_segs) == 2
     assert sub_segs[0].target_timerange.start == 4_000_000
     assert sub_segs[1].target_timerange.start == 7_000_000
-    
+
     # 4. Logo (long_story_logo): starts at 3,000,000
     logo_segs = added_segments.get("long_story_logo", [])
     assert len(logo_segs) == 1
     assert logo_segs[0].target_timerange.start == 3_000_000
-    
+
     # 5. Animation (long_story_anim): timing="end" -> voice_duration - anim_duration
     # mock anim_duration = 5_000_000
     # starts at 3,000,000 + (10,000,000 - 5,000,000) = 8,000,000
@@ -221,12 +221,12 @@ def test_intro_outro_timeline_shift(tmp_path, monkeypatch):
 def test_intro_outro_effect_skip(tmp_path):
     # Setup mock draft file
     draft_file = tmp_path / "draft_content.json"
-    
+
     # Paths we want to mock
     intro_path = str(tmp_path / "intro.mp4")
     outro_path = str(tmp_path / "outro.mp4")
     main_path = str(tmp_path / "main.mp4")
-    
+
     mock_draft = {
         "materials": {
             "videos": [
@@ -263,14 +263,14 @@ def test_intro_outro_effect_skip(tmp_path):
             }
         ]
     }
-    
+
     draft_file.write_text(json.dumps(mock_draft), encoding="utf-8")
-    
+
     # 1. Test Keyframe skipping
     class DummyArgs:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
-            
+
     args = DummyArgs(
         segment_type="video",
         mode="replace",
@@ -278,17 +278,17 @@ def test_intro_outro_effect_skip(tmp_path):
         intro_path=intro_path,
         outro_path=outro_path
     )
-    
+
     # Apply a keyframe preset (e.g. Zoom In Slow)
     presets = [KEYFRAME_PRESETS[0]]
     changed = kt.apply_random_presets_to_file(draft_file, args, presets)
-    
+
     # Verify: only mat_main got updated
     assert changed == 1
-    
+
     updated_data = json.loads(draft_file.read_text(encoding="utf-8"))
     segs = updated_data["tracks"][0]["segments"]
-    
+
     # Intro: common_keyframes empty
     assert len(segs[0].get("common_keyframes", [])) == 0
     # Main: common_keyframes populated
@@ -314,13 +314,13 @@ def test_intro_outro_effect_skip(tmp_path):
         intro_path=intro_path,
         outro_path=outro_path
     )
-    
+
     changed_trans = kt.apply_random_transitions_to_file(draft_file, args_trans, trans_presets)
     assert changed_trans == 1
-    
+
     updated_data2 = json.loads(draft_file.read_text(encoding="utf-8"))
     segs2 = updated_data2["tracks"][0]["segments"]
-    
+
     # Segment 0 (Intro): extra_material_refs empty
     assert len(segs2[0].get("extra_material_refs", [])) == 0
     # Segment 1 (Main): extra_material_refs has transition
@@ -329,18 +329,18 @@ def test_intro_outro_effect_skip(tmp_path):
 def test_cloud_sync_mock(monkeypatch):
     import urllib.request
     from io import BytesIO
-    
+
     class MockResponse:
         def __init__(self, data, status=200):
             self.data = data
             self.status = status
-        
+
         def read(self):
             return self.data
-            
+
         def __enter__(self):
             return self
-            
+
         def __exit__(self, exc_type, exc_val, exc_tb):
             pass
 
@@ -352,11 +352,11 @@ def test_cloud_sync_mock(monkeypatch):
         clip_max_sec=10.0,
         logo_path="C:/test/logo.png"
     )
-    
+
     # 1. Test Export (PUT Request)
     put_urls = []
     put_data = []
-    
+
     def mock_urlopen(req, timeout=10):
         url = req.full_url if hasattr(req, "full_url") else req
         if isinstance(req, urllib.request.Request):
@@ -375,52 +375,52 @@ def test_cloud_sync_mock(monkeypatch):
                 }
                 return MockResponse(json.dumps(profile_json).encode("utf-8"), 200)
         return MockResponse(b"", 404)
-        
+
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
 
     # Get current profile data
     profile_data = ProfileManager.get_profile(profile_id)
     assert profile_data is not None
-    
+
     export_data = dict(profile_data)
     export_data.pop('id', None)
     export_data.pop('created_at', None)
     export_data.pop('version', None)
-    
+
     code = "PF-TEST12"
     url = f"https://kvdb.io/capcut_draft_studio_v1/{code}"
-    
+
     req = urllib.request.Request(
         url,
         data=json.dumps(export_data, ensure_ascii=False).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
         method='PUT'
     )
-    
+
     with urllib.request.urlopen(req) as resp:
         assert resp.status == 200
-        
+
     assert len(put_urls) == 1
     assert put_urls[0] == url
     uploaded = json.loads(put_data[0].decode("utf-8"))
     assert uploaded["name"] == "Cloud Test Profile"
     assert uploaded["canvas"] == "16:9"
     assert uploaded["logo_path"] == "C:/test/logo.png"
-    
+
     # 2. Test Import (GET Request)
     req_get = urllib.request.Request(url, method='GET')
     with urllib.request.urlopen(req_get) as resp_get:
         imported_data = json.loads(resp_get.read().decode("utf-8"))
-        
+
     assert imported_data["name"] == "Cloud Test Profile Sync"
-    
+
     # Verify save logic
     counter = 1
     new_name = imported_data["name"]
     while ProfileManager.get_profile_by_name(new_name):
         new_name = f"{imported_data['name']} (Đồng bộ {counter})"
         counter += 1
-        
+
     imported_id = ProfileManager.create_profile(
         name=new_name,
         canvas=imported_data["canvas"],
@@ -428,17 +428,47 @@ def test_cloud_sync_mock(monkeypatch):
         clip_max_sec=imported_data["clip_max_sec"],
         logo_path=imported_data["logo_path"]
     )
-    
+
     assert imported_id is not None
     saved = ProfileManager.get_profile(imported_id)
     assert saved["name"] == "Cloud Test Profile Sync"
     assert saved["canvas"] == "16:9"
     assert saved["logo_path"] == "C:/sync/logo.png"
 
-def test_chroma_image_removal(tmp_path):
+from contextlib import contextmanager
+import io
+import logging
+
+class StrictCP1252StreamHandler(logging.StreamHandler):
+    def handleError(self, record):
+        raise
+
+@contextmanager
+def cp1252_logger_ctx():
+    from core.logger import logger
+    old_level = logger.level
+    old_propagate = logger.propagate
+    old_handlers = list(logger.handlers)
+    logger.handlers = []
+
+    bio = io.BytesIO()
+    stream = io.TextIOWrapper(bio, encoding="cp1252", errors="strict")
+    handler = StrictCP1252StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    try:
+        yield stream, bio
+    finally:
+        logger.handlers = old_handlers
+        logger.level = old_level
+        logger.propagate = old_propagate
+
+def test_chroma_image_removal(tmp_path, monkeypatch):
     from PIL import Image
     from core.chroma import remove_solid_bg_from_image
-    
+
     # Tạo ảnh dummy với 3 pixel: 1 pixel xanh lá thuần, 1 pixel hơi xanh lá, 1 pixel màu đỏ
     img_path = tmp_path / "test_logo.png"
     img = Image.new("RGBA", (3, 1))
@@ -448,112 +478,227 @@ def test_chroma_image_removal(tmp_path):
         (255, 0, 0, 255)     # Đỏ (chắc chắn giữ)
     ])
     img.save(img_path)
-    
+
     out_dir = tmp_path / "output_overlay"
-    # similarity = 0.32 (threshold ~ 138.72), blend = 0.02 (feather ~ 8.67)
-    out_path = remove_solid_bg_from_image(
-        source_path=img_path,
-        output_dir=out_dir,
-        prefix="logo",
-        mode="green",
-        similarity=0.32,
-        blend=0.02
-    )
-    
-    assert out_path.exists()
-    assert out_path.name == "logo_test_logo_green_transparent.png"
-    
-    # Đọc lại ảnh kết quả
-    res_img = Image.open(out_path)
-    pixels = res_img.load()
-    
-    # Pixel 0: Xanh lá thuần -> Phải có alpha = 0 (xóa)
-    assert pixels[0, 0][3] == 0
-    # Pixel 1: Gần xanh lá (dist = ~39.05 <= 138.72) -> Phải có alpha = 0 (xóa)
-    assert pixels[1, 0][3] == 0
-    # Pixel 2: Đỏ -> Phải có alpha = 255 (giữ nguyên)
-    assert pixels[2, 0][3] == 255
+
+    with cp1252_logger_ctx() as (stream, bio):
+        # 1. Test green overlay
+        out_path_green = remove_solid_bg_from_image(
+            source_path=img_path,
+            output_dir=out_dir,
+            prefix="logo",
+            mode="green",
+            similarity=0.32,
+            blend=0.02
+        )
+        assert out_path_green.exists()
+        assert out_path_green.name == "logo_test_logo_green_transparent.png"
+
+        # Đọc lại ảnh kết quả để xác minh
+        res_img = Image.open(out_path_green)
+        pixels = res_img.load()
+        assert pixels[0, 0][3] == 0
+        assert pixels[1, 0][3] == 0
+        assert pixels[2, 0][3] == 255
+
+        # 2. Test black overlay
+        out_path_black = remove_solid_bg_from_image(
+            source_path=img_path,
+            output_dir=out_dir,
+            prefix="logo",
+            mode="black",
+            similarity=0.32,
+            blend=0.02
+        )
+        assert out_path_black.exists()
+        assert out_path_black.name == "logo_test_logo_black_transparent.png"
+
+        # 3. Test white overlay
+        out_path_white = remove_solid_bg_from_image(
+            source_path=img_path,
+            output_dir=out_dir,
+            prefix="logo",
+            mode="white",
+            similarity=0.32,
+            blend=0.02
+        )
+        assert out_path_white.exists()
+        assert out_path_white.name == "logo_test_logo_white_transparent.png"
+
+        stream.flush()
+        log_content = bio.getvalue().decode("cp1252")
+        assert "[CHROMA]" in log_content
 
 def test_chroma_video_removal_ffmpeg(tmp_path, monkeypatch):
     import subprocess
     import runtime_tools
     from core.chroma import remove_solid_bg_from_video
-    
+
     # Mock resolve_ffmpeg để trả về path dummy
     monkeypatch.setattr(runtime_tools, "resolve_ffmpeg", lambda: "mock_ffmpeg.exe")
-    
-    # Mock subprocess.run
+
+    # Mock subprocess.Popen
     captured_cmds = []
-    class DummyResult:
-        returncode = 0
-        stderr = ""
-        stdout = ""
-        
-    def mock_run(cmd, **kwargs):
-        captured_cmds.append(cmd)
-        # Giả lập FFmpeg tạo file output
-        out_file = Path(cmd[-1])
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-        out_file.touch()
-        return DummyResult()
-        
-    monkeypatch.setattr(subprocess, "run", mock_run)
-    
+    class DummyPopen:
+        def __init__(self, cmd, **kwargs):
+            captured_cmds.append(cmd)
+            out_file = Path(cmd[-1])
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.touch()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self):
+            return ("", "")
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            pass
+
+    monkeypatch.setattr(subprocess, "Popen", DummyPopen)
+
     video_path = tmp_path / "subscribe.mp4"
     video_path.touch()
-    
+
     out_dir = tmp_path / "output_overlay"
-    
-    # 1. Test green screen (should use chromakey)
-    res_green = remove_solid_bg_from_video(
-        source_path=video_path,
-        output_dir=out_dir,
-        prefix="anim",
-        mode="green",
-        similarity=0.15,
-        blend=0.05
-    )
-    assert res_green.exists()
-    # verify chromakey is used in the command argument
-    flat_cmds = [str(x) for x in captured_cmds[0]]
-    vf_arg = next(arg for arg in flat_cmds if "chromakey" in arg)
-    assert "chromakey=0x00FF00:0.150:0.050,format=argb" in vf_arg
-    
-    # 2. Test black screen (should use colorkey)
-    res_black = remove_solid_bg_from_video(
-        source_path=video_path,
-        output_dir=out_dir,
-        prefix="anim",
-        mode="black",
-        similarity=0.20,
-        blend=0.10
-    )
-    assert res_black.exists()
-    flat_cmds_black = [str(x) for x in captured_cmds[1]]
-    vf_arg_black = next(arg for arg in flat_cmds_black if "colorkey" in arg)
-    assert "colorkey=0x000000:0.200:0.100,format=argb" in vf_arg_black
+
+    with cp1252_logger_ctx() as (stream, bio):
+        # 1. Test green screen (should use chromakey)
+        res_green = remove_solid_bg_from_video(
+            source_path=video_path,
+            output_dir=out_dir,
+            prefix="anim",
+            mode="green",
+            similarity=0.15,
+            blend=0.05
+        )
+        assert res_green.exists()
+        # verify chromakey is used in the command argument
+        flat_cmds = [str(x) for x in captured_cmds[0]]
+        vf_arg = next(arg for arg in flat_cmds if "chromakey" in arg)
+        assert "chromakey=0x00FF00:0.150:0.050,format=argb" in vf_arg
+
+        # 2. Test black screen (should use colorkey)
+        res_black = remove_solid_bg_from_video(
+            source_path=video_path,
+            output_dir=out_dir,
+            prefix="anim",
+            mode="black",
+            similarity=0.20,
+            blend=0.10
+        )
+        assert res_black.exists()
+        flat_cmds_black = [str(x) for x in captured_cmds[1]]
+        vf_arg_black = next(arg for arg in flat_cmds_black if "colorkey" in arg)
+        assert "colorkey=0x000000:0.200:0.100,format=argb" in vf_arg_black
+
+        # 3. Test white screen (should use colorkey)
+        res_white = remove_solid_bg_from_video(
+            source_path=video_path,
+            output_dir=out_dir,
+            prefix="anim",
+            mode="white",
+            similarity=0.25,
+            blend=0.15
+        )
+        assert res_white.exists()
+        flat_cmds_white = [str(x) for x in captured_cmds[2]]
+        vf_arg_white = next(arg for arg in flat_cmds_white if "colorkey" in arg)
+        assert "colorkey=0xFFFFFF:0.250:0.150,format=argb" in vf_arg_white
+
+        stream.flush()
+        log_content = bio.getvalue().decode("cp1252")
+        assert "[CHROMA]" in log_content
+
+def test_chroma_prepare_overlay_smoke(tmp_path, monkeypatch):
+    import subprocess
+    import runtime_tools
+    from core.chroma import prepare_overlay_asset
+
+    monkeypatch.setattr(runtime_tools, "resolve_ffmpeg", lambda: "mock_ffmpeg.exe")
+
+    class DummyPopen:
+        def __init__(self, cmd, **kwargs):
+            out_file = Path(cmd[-1])
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.touch()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self):
+            return ("", "")
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            pass
+
+    monkeypatch.setattr(subprocess, "Popen", DummyPopen)
+
+    # 1. Smoke test image overlay
+    from PIL import Image
+    img_path = tmp_path / "smoke_logo.png"
+    img = Image.new("RGBA", (1, 1), (0, 255, 0, 255))
+    img.save(img_path)
+
+    out_dir = tmp_path / "output_smoke"
+
+    with cp1252_logger_ctx() as (stream, bio):
+        out_img = prepare_overlay_asset(
+            source=img_path,
+            bg_mode="green",
+            output_dir=out_dir,
+            prefix="logo",
+            similarity=0.18,
+            blend=0.08
+        )
+        assert out_img.exists()
+
+        # 2. Smoke test video overlay
+        video_path = tmp_path / "smoke_video.mp4"
+        video_path.touch()
+        out_vid = prepare_overlay_asset(
+            source=video_path,
+            bg_mode="black",
+            output_dir=out_dir,
+            prefix="video",
+            similarity=0.18,
+            blend=0.08
+        )
+        assert out_vid.exists()
+
+        stream.flush()
+        log_content = bio.getvalue().decode("cp1252")
+        assert "[CHROMA]" in log_content
 
 def test_effects_karaoke_subtitles():
     import pyJianYingDraft as draft
     from core.effects import apply_karaoke_subtitles
-    
+
     # Tạo ScriptFile
     script = draft.ScriptFile(1080, 1920, 30, True)
     track_name = "test_sub_track"
     script.add_track(track_type=draft.TrackType.text, track_name=track_name, relative_index=0)
-    
+
     style = draft.TextStyle()
     # Thêm 2 segment text
     seg1 = draft.TextSegment("Hello", timerange=draft.trange(start=0, duration=3_000_000), style=style)
     seg2 = draft.TextSegment("World", timerange=draft.trange(start=4_000_000, duration=2_500_000), style=style)
-    
+
     script.add_segment(seg1, track_name)
     script.add_segment(seg2, track_name)
-    
+
     # Apply karaoke animation
     count = apply_karaoke_subtitles(script, track_name)
     assert count == 2
-    
+
     # Verify segment 1 has karaoke animation
     assert seg1.animations_instance is not None
     anims = seg1.animations_instance.animations

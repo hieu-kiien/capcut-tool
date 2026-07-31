@@ -1,0 +1,9 @@
+Draft Creation Success:
+Normal Draft Path: scratch/compact_smoke/run_1/Drafts/TestDraft_Normal
+Compact Draft Path: scratch/compact_smoke/run_1/Drafts/TestDraft_Compact
+Draft JSON sizes:
+- Normal draft_content.json: 10455 bytes
+- Compact draft_content.json: 5475 bytes
+
+Both Drafts generate without errors. Validated JSON successfully.
+Waiting for GUI lease to verify with CapCut PC.

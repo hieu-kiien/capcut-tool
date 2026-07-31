@@ -641,6 +641,102 @@ def _detect_local_platform_info(draft_root: Path, exclude_name: str = None) -> O
     }
 
 
+def clean_all_backups_retention(keep_days: int) -> int:
+    """Cleans all backup records from database and disk that are older than keep_days."""
+    import time as _time
+    from core.db import Database
+    from pathlib import Path
+    from datetime import datetime, timedelta
+    
+    cutoff = datetime.now() - timedelta(days=keep_days)
+    deleted_count = 0
+    
+    try:
+        conn = Database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, backup_path, timestamp FROM backups")
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            backup_id = row["id"]
+            path_str = row["backup_path"]
+            ts_str = row["timestamp"]
+            
+            # Determine if it exceeds retention
+            should_delete = False
+            try:
+                dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                if dt < cutoff:
+                    should_delete = True
+            except Exception:
+                try:
+                    p = Path(path_str)
+                    if p.exists():
+                        mtime = datetime.fromtimestamp(p.stat().st_mtime)
+                        if mtime < cutoff:
+                            should_delete = True
+                    else:
+                        should_delete = True
+                except Exception:
+                    pass
+            
+            if should_delete:
+                try:
+                    p = Path(path_str)
+                    if p.exists():
+                        p.unlink()
+                except OSError as e:
+                    print(f"Error unlinking backup file {path_str}: {e}")
+                
+                cursor.execute("DELETE FROM backups WHERE id = ?", (backup_id,))
+                deleted_count += 1
+                
+        conn.commit()
+    except Exception as e:
+        print(f"Error in clean_all_backups_retention: {e}")
+        
+    return deleted_count
+
+
+def find_capcut_executable() -> Optional[Path]:
+    """
+    Auto-discovers the absolute path to CapCut.exe on Windows.
+    Checks LocalAppData Apps directory, version subdirectories, Program Files, and standard paths.
+    """
+    if os.name != "nt":
+        return None
+        
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    if local_appdata:
+        capcut_dir = Path(local_appdata) / "CapCut" / "Apps"
+        if capcut_dir.exists():
+            direct_exe = capcut_dir / "CapCut.exe"
+            if direct_exe.exists():
+                return direct_exe
+                
+            # Scan version subdirectories (e.g. Apps/3.8.0.1234/CapCut.exe)
+            for sub in capcut_dir.glob("*/CapCut.exe"):
+                if sub.is_file():
+                    return sub
+
+        direct_capcut = Path(local_appdata) / "CapCut" / "CapCut.exe"
+        if direct_capcut.exists():
+            return direct_capcut
+
+    # Check Program Files fallback
+    prog_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+    pf_exe = Path(prog_files) / "CapCut" / "CapCut.exe"
+    if pf_exe.exists():
+        return pf_exe
+
+    prog_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+    pf_x86_exe = Path(prog_files_x86) / "CapCut" / "CapCut.exe"
+    if pf_x86_exe.exists():
+        return pf_x86_exe
+
+    return None
+
+
 if __name__ == "__main__":
     import argparse
 

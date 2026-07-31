@@ -34,7 +34,7 @@ class DraftFolder:
 
     def _resolve_draft_path(self, draft_name: str) -> str:
         """Validate draft name and resolve safe absolute path inside folder_path."""
-        from app.path_validation import validate_project_name
+        from core.path_validation import validate_project_name
         resolved_draft = validate_project_name(draft_name, self.folder_path)
         return str(resolved_draft)
 

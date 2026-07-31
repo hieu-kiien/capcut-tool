@@ -89,6 +89,7 @@ class ProjectConfig:
     # Media Switching Settings
     bg_switch_mode: str = "time"  # "time", "subtitle", "subtitle_group"
     bg_switch_group_size: int = 3
+    ffmpeg_overlay_timeout_sec: float = 60.0
 
 
 @dataclass
@@ -181,7 +182,7 @@ class PipelineRunner:
                             intro_path=self.config.intro_path,
                             outro_path=self.config.outro_path
                         )
-                        changed = kt.apply_random_presets_to_file(draft_path, args, presets_to_apply)
+                        changed = kt.apply_random_presets_to_file(draft_path, args, presets_to_apply, cancel_check=cancel_check)
                         self._emit(progress, f"[OK] Đã tự động áp dụng keyframe cho {changed} phân đoạn.")
                 
                 # 2. Auto Transition
@@ -206,7 +207,7 @@ class PipelineRunner:
                         intro_path=self.config.intro_path,
                         outro_path=self.config.outro_path
                     )
-                    changed = kt.apply_random_transitions_to_file(draft_path, args, transition_presets)
+                    changed = kt.apply_random_transitions_to_file(draft_path, args, transition_presets, cancel_check=cancel_check)
                     self._emit(progress, f"[OK] Đã tự động chèn chuyển cảnh thành công cho {changed} điểm cắt.")
             except Exception as e:
                 if isinstance(e, JobCancelled):

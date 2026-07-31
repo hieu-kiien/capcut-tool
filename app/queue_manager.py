@@ -4,7 +4,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from PySide6.QtCore import QObject, Signal, Slot, QThread, QRunnable, QThreadPool
+from PySide6.QtCore import QObject, Signal, Slot, QThread, QRunnable, QThreadPool, QMutex, QMutexLocker, Qt
 
 from core.db import Database
 from app.pipeline import PipelineRunner, ProjectConfig, StepResult
@@ -30,6 +30,39 @@ class BuildJob:
         self.finished_at = finished_at
         self.error_message = error_message
         self.logs: List[str] = []
+        self.step_states = {
+            "validate": "pending",
+            "scan": "pending",
+            "allocate": "pending",
+            "timeline": "pending",
+            "write": "pending",
+            "complete": "pending"
+        }
+        if self.status == "completed":
+            self.step_states = {k: "done" for k in self.step_states}
+        elif self.status in ("failed", "cancelled"):
+            if self.progress == 0:
+                self.step_states["validate"] = "error"
+            elif self.progress == 25:
+                self.step_states["validate"] = "done"
+                self.step_states["scan"] = "error"
+            elif self.progress == 50:
+                self.step_states["validate"] = "done"
+                self.step_states["scan"] = "done"
+                self.step_states["allocate"] = "error"
+            elif self.progress == 75:
+                self.step_states["validate"] = "done"
+                self.step_states["scan"] = "done"
+                self.step_states["allocate"] = "done"
+                self.step_states["timeline"] = "done"
+                self.step_states["write"] = "error"
+            else:
+                self.step_states["validate"] = "done"
+                self.step_states["scan"] = "done"
+                self.step_states["allocate"] = "done"
+                self.step_states["timeline"] = "done"
+                self.step_states["write"] = "done"
+                self.step_states["complete"] = "error"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -43,25 +76,16 @@ class BuildJob:
         }
 
 
-class WorkerSignals(QObject):
+class QueuePipelineWorker(QObject):
     log_signal = Signal(str)
     step_signal = Signal(object)
     finished_signal = Signal(dict)
     failed_signal = Signal(str)
 
-
-class QueuePipelineWorker(QRunnable):
     def __init__(self, config: ProjectConfig):
         super().__init__()
         self.config = config
-        self.signals = WorkerSignals()
         self.cancel_requested = False
-        
-        # Expose signals directly for backward compatibility
-        self.log_signal = self.signals.log_signal
-        self.step_signal = self.signals.step_signal
-        self.finished_signal = self.signals.finished_signal
-        self.failed_signal = self.signals.failed_signal
 
     def cancel(self):
         self.cancel_requested = True
@@ -121,6 +145,7 @@ class BatchQueueManager(QObject):
         self.current_job_id: Optional[str] = None
         self.thread: Optional[QThread] = None
         self.worker: Optional[QueuePipelineWorker] = None
+        self._mutex = QMutex()
         
         self._load_jobs_from_db()
 
@@ -128,15 +153,13 @@ class BatchQueueManager(QObject):
         """Loads jobs from the SQLite database and resets any stuck 'running' jobs to 'failed'."""
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
-            
-            # Reset stuck running jobs
-            cursor.execute(
-                "UPDATE build_jobs SET status = 'failed', error_message = 'Bị gián đoạn do tắt ứng dụng đột ngột' WHERE status = 'running'"
-            )
-            conn.commit()
+            with conn:
+                conn.execute(
+                    "UPDATE build_jobs SET status = 'failed', error_message = 'Bị gián đoạn do tắt ứng dụng đột ngột' WHERE status = 'running'"
+                )
             
             # Load all jobs
+            cursor = conn.cursor()
             cursor.execute("SELECT * FROM build_jobs ORDER BY started_at ASC, id ASC")
             rows = cursor.fetchall()
             for row in rows:
@@ -175,7 +198,17 @@ class BatchQueueManager(QObject):
                         chroma_mode=cfg_dict.get("chroma_mode", "green"),
                         chroma_threshold=cfg_dict.get("chroma_threshold", 32),
                         chroma_shadow=cfg_dict.get("chroma_shadow", 2),
-                        subtitle_karaoke=cfg_dict.get("subtitle_karaoke", False)
+                        subtitle_karaoke=cfg_dict.get("subtitle_karaoke", False),
+                        allow_replace=cfg_dict.get("allow_replace", False),
+                        logo_bg_mode=cfg_dict.get("logo_bg_mode", "none"),
+                        anim_bg_mode=cfg_dict.get("anim_bg_mode", "none"),
+                        ffmpeg_overlay_timeout_sec=cfg_dict.get("ffmpeg_overlay_timeout_sec", 60.0),
+                        subtitle_font_size=cfg_dict.get("subtitle_font_size", 6.0),
+                        subtitle_color=tuple(cfg_dict.get("subtitle_color", (1.0, 1.0, 1.0))) if "subtitle_color" in cfg_dict else (1.0, 1.0, 1.0),
+                        subtitle_bold=cfg_dict.get("subtitle_bold", True),
+                        subtitle_outline_width=cfg_dict.get("subtitle_outline_width", 40.0),
+                        subtitle_shadow_alpha=cfg_dict.get("subtitle_shadow_alpha", 0.8),
+                        subtitle_shadow_distance=cfg_dict.get("subtitle_shadow_distance", 5.0)
                     )
                     job = BuildJob(
                         job_id=row["id"],
@@ -214,19 +247,18 @@ class BatchQueueManager(QObject):
         # Save to DB
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
             cfg_json = json.dumps({
                 k: v for k, v in config.__dict__.items()
                 if not k.startswith("_")
             })
-            cursor.execute(
-                """
-                INSERT INTO build_jobs (id, status, progress, project_name, config_json)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (job_id, "pending", 0, config.project_name, cfg_json)
-            )
-            conn.commit()
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO build_jobs (id, status, progress, project_name, config_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (job_id, "pending", 0, config.project_name, cfg_json)
+                )
         except Exception as db_err:
             print(f"Error inserting job in DB: {db_err}")
 
@@ -265,9 +297,8 @@ class BatchQueueManager(QObject):
         self.jobs.pop(job_idx)
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM build_jobs WHERE id = ?", (job_id,))
-            conn.commit()
+            with conn:
+                conn.execute("DELETE FROM build_jobs WHERE id = ?", (job_id,))
         except Exception as db_err:
             print(f"Error deleting job from DB: {db_err}")
             
@@ -307,14 +338,13 @@ class BatchQueueManager(QObject):
                 
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
-            if running_job:
-                cursor.execute("DELETE FROM build_jobs WHERE id != ?", (running_job.id,))
-                self.jobs = [running_job]
-            else:
-                cursor.execute("DELETE FROM build_jobs")
-                self.jobs = []
-            conn.commit()
+            with conn:
+                if running_job:
+                    conn.execute("DELETE FROM build_jobs WHERE id != ?", (running_job.id,))
+                    self.jobs = [running_job]
+                else:
+                    conn.execute("DELETE FROM build_jobs")
+                    self.jobs = []
         except Exception as db_err:
             print(f"Error clearing jobs in DB: {db_err}")
 
@@ -322,6 +352,7 @@ class BatchQueueManager(QObject):
 
     def _run_next_job(self):
         """Finds and runs the next pending job in the queue."""
+        locker = QMutexLocker(self._mutex)
         if not self.is_running or self.is_paused:
             return
         if self.current_job_id is not None:
@@ -347,28 +378,36 @@ class BatchQueueManager(QObject):
         # Update DB status
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE build_jobs SET status = 'running', started_at = ? WHERE id = ?",
-                (next_job.started_at, next_job.id)
-            )
-            conn.commit()
+            with conn:
+                conn.execute(
+                    "UPDATE build_jobs SET status = 'running', started_at = ? WHERE id = ?",
+                    (next_job.started_at, next_job.id)
+                )
         except Exception as db_err:
             print(f"Error updating job status: {db_err}")
 
         self.job_started.emit(next_job.id)
         
-        # Launch using QThreadPool
+        # Launch using QThread
+        self.thread = QThread()
         self.worker = QueuePipelineWorker(next_job.config)
+        self.worker.moveToThread(self.thread)
         
         # Signals
-        self.worker.log_signal.connect(self._on_worker_log)
-        self.worker.step_signal.connect(self._on_worker_step)
-        self.worker.finished_signal.connect(self._on_worker_finished)
-        self.worker.failed_signal.connect(self._on_worker_failed)
+        self.thread.started.connect(self.worker.run, Qt.QueuedConnection)
+        self.worker.log_signal.connect(self._on_worker_log, Qt.QueuedConnection)
+        self.worker.step_signal.connect(self._on_worker_step, Qt.QueuedConnection)
+        self.worker.finished_signal.connect(self._on_worker_finished, Qt.QueuedConnection)
+        self.worker.failed_signal.connect(self._on_worker_failed, Qt.QueuedConnection)
         
-        self._append_log_to_current("[HỆ THỐNG] Khởi động tiến trình xử lý hàng đợi trên QThreadPool...")
-        QThreadPool.globalInstance().start(self.worker)
+        # Cleanup connection when finished
+        self.worker.finished_signal.connect(self.thread.quit)
+        self.worker.failed_signal.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(self._on_thread_finished)
+        
+        self._append_log_to_current("[HỆ THỐNG] Khởi động tiến trình xử lý hàng đợi trên QThread...")
+        self.thread.start()
 
     def _append_log_to_current(self, text: str):
         if self.current_job_id:
@@ -387,26 +426,57 @@ class BatchQueueManager(QObject):
         if not self.current_job_id:
             return
             
-        # Map step code to progress percent
-        step_progress_map = {
-            "preflight": 25,
-            "scan_media": 50,
-            "plan_media": 75,
-            "write_draft": 100
-        }
-        val = step_progress_map.get(step_res.code, 0)
+        # Map step code and status to progress percent (smoothly dividing it)
+        if step_res.status == "running":
+            progress_map = {
+                "preflight": 5,
+                "scan_media": 30,
+                "plan_media": 55,
+                "write_draft": 80
+            }
+        else: # done, error, cancelled
+            progress_map = {
+                "preflight": 25,
+                "scan_media": 50,
+                "plan_media": 75,
+                "write_draft": 100
+            }
+        val = progress_map.get(step_res.code, 0)
         
         # Update in list
         for j in self.jobs:
             if j.id == self.current_job_id:
                 j.progress = val
                 
+                # Update detailed step states based on backend step result
+                code = step_res.code
+                status = step_res.status  # "running", "done", "error", "cancelled"
+                
+                if code == "preflight":
+                    j.step_states["validate"] = status
+                elif code == "scan_media":
+                    j.step_states["validate"] = "done"
+                    j.step_states["scan"] = status
+                elif code == "plan_media":
+                    j.step_states["validate"] = "done"
+                    j.step_states["scan"] = "done"
+                    j.step_states["allocate"] = status
+                    if status == "done":
+                        j.step_states["timeline"] = "running"
+                elif code == "write_draft":
+                    j.step_states["validate"] = "done"
+                    j.step_states["scan"] = "done"
+                    j.step_states["allocate"] = "done"
+                    j.step_states["timeline"] = "done"
+                    j.step_states["write"] = status
+                    if status == "done":
+                        j.step_states["complete"] = "running"
+                
                 # Update DB
                 try:
                     conn = Database.get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE build_jobs SET progress = ? WHERE id = ?", (val, j.id))
-                    conn.commit()
+                    with conn:
+                        conn.execute("UPDATE build_jobs SET progress = ? WHERE id = ?", (val, j.id))
                 except Exception as db_err:
                     print(f"Error updating progress in DB: {db_err}")
                     
@@ -445,11 +515,27 @@ class BatchQueueManager(QObject):
                 j.error_message = error_msg
                 if status == "completed":
                     j.progress = 100
+                    j.step_states = {k: "done" for k in j.step_states}
                     j.logs.append("[THÀNH CÔNG] Đã hoàn thành tác vụ tạo dự án nháp CapCut.")
-                elif status == "cancelled":
-                    j.logs.append("[CẢNH BÁO] Tác vụ đã bị hủy bỏ bởi người dùng.")
-                else:
-                    j.logs.append(f"[LỖI] Tiến trình thất bại: {error_msg}")
+                elif status in ("cancelled", "failed"):
+                    # Update running/non-done step to error state
+                    step_status = "cancelled" if status == "cancelled" else "error"
+                    found_running = False
+                    for step in ("validate", "scan", "allocate", "timeline", "write", "complete"):
+                        if j.step_states.get(step) == "running":
+                            j.step_states[step] = step_status
+                            found_running = True
+                            break
+                    if not found_running:
+                        for step in ("validate", "scan", "allocate", "timeline", "write", "complete"):
+                            if j.step_states.get(step) != "done":
+                                j.step_states[step] = step_status
+                                break
+                    
+                    if status == "cancelled":
+                        j.logs.append("[CẢNH BÁO] Tác vụ đã bị hủy bỏ bởi người dùng.")
+                    else:
+                        j.logs.append(f"[LỖI] Tiến trình thất bại: {error_msg}")
                 job_obj = j
                 break
                 
@@ -482,12 +568,11 @@ class BatchQueueManager(QObject):
         # Update DB
         try:
             conn = Database.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE build_jobs SET status = ?, finished_at = ?, error_message = ?, progress = ? WHERE id = ?",
-                (status, finished_at, error_msg, 100 if status == "completed" else 0, job_id)
-            )
-            conn.commit()
+            with conn:
+                conn.execute(
+                    "UPDATE build_jobs SET status = ?, finished_at = ?, error_message = ?, progress = ? WHERE id = ?",
+                    (status, finished_at, error_msg, 100 if status == "completed" else 0, job_id)
+                )
         except Exception as db_err:
             print(f"Error updating job final state in DB: {db_err}")
 
@@ -506,3 +591,72 @@ class BatchQueueManager(QObject):
     def _on_thread_finished(self):
         # Safe cleanup
         pass
+
+    def shutdown(self, wait_ms: int = 5000) -> bool:
+        """
+        Shuts down the queue manager, cancels the current job,
+        terminates all child processes (FFmpeg, yt-dlp, etc.),
+        and waits for the running worker thread to exit.
+        """
+        # 1. Stop queue processing
+        self.is_running = False
+        self.is_paused = True
+        
+        # 2. Cancel current job
+        if self.current_job_id:
+            self.cancel_current_job()
+            
+        # 3. Terminate all child processes to unblock threads
+        self.terminate_child_processes()
+        
+        # 4. Wait for the QThreadPool worker to finish
+        if self.worker:
+            import time
+            from PySide6.QtCore import QCoreApplication
+            start_time = time.monotonic()
+            while self.worker is not None and (time.monotonic() - start_time) * 1000 < wait_ms:
+                QCoreApplication.processEvents()
+                time.sleep(0.05)
+                
+        return True
+
+    def terminate_child_processes(self):
+        """Terminates child subprocesses (FFmpeg, yt-dlp, etc.) spawned by the app using psutil."""
+        import os
+        try:
+            import psutil
+            target_names = {"ffmpeg", "ffprobe", "yt-dlp", "gallery-dl", "ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe", "gallery-dl.exe"}
+            current_process = psutil.Process(os.getpid())
+            children = current_process.children(recursive=True)
+            
+            targets = []
+            for child in children:
+                try:
+                    name = child.name().lower()
+                    cmdline = [arg.lower() for arg in (child.cmdline() or [])]
+                    
+                    is_target = (name in target_names)
+                    if not is_target and "python" in name:
+                        # Check if running a target module
+                        if any(mod in cmdline for mod in ["yt_dlp", "gallery_dl"]):
+                            is_target = True
+                            
+                    if is_target:
+                        targets.append(child)
+                except Exception:
+                    pass
+                    
+            for child in targets:
+                try:
+                    child.terminate()
+                except Exception:
+                    pass
+            # Wait up to 1 second for graceful termination, then force kill
+            gone, alive = psutil.wait_procs(targets, timeout=1.0)
+            for child in alive:
+                try:
+                    child.kill()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Error terminating child processes: {e}")

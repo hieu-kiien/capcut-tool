@@ -33,6 +33,7 @@
         "subtitle_shadow_alpha": 0.8,
         "subtitle_shadow_distance": 5.0,
         "bg_switch_mode": "time",
-        "bg_switch_group_size": 3.0
+        "bg_switch_group_size": 3.0,
+        "ffmpeg_overlay_timeout_sec": 60.0
     }
 }

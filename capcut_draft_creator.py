@@ -64,7 +64,7 @@ def handle_partial_draft(func):
     @wraps(func)
     def wrapper(draft_root, project_name, *args, **kwargs):
         try:
-            from app.path_validation import validate_project_name
+            from core.path_validation import validate_project_name
             resolved_draft_path = validate_project_name(project_name, draft_root)
         except ValueError:
             resolved_draft_path = None
@@ -106,6 +106,35 @@ def handle_partial_draft(func):
             raise e
     return wrapper
 
+
+def auto_wrap_subtitle(text: str, max_words: int = 8) -> str:
+    """
+    Wrap subtitle text containing > max_words into two lines (\n)
+    for clean 9:16 vertical video framing.
+    """
+    if not text:
+        return ""
+    lines = text.split("\n")
+    wrapped_lines = []
+    for line in lines:
+        words = line.split()
+        if len(words) > max_words:
+            mid = len(words) // 2
+            wrapped_lines.append(" ".join(words[:mid]) + "\n" + " ".join(words[mid:]))
+        else:
+            wrapped_lines.append(line)
+    return "\n".join(wrapped_lines)
+
+
+def calculate_bgm_volume(voice_path: str = None, voice_duration: float = 0.0, default_volume: float = 1.0) -> float:
+    """
+    Calculates BGM volume with Audio Auto-Ducking (20%).
+    Scales BGM volume factor to 0.20 (20%) when voice narration is present.
+    """
+    from video_mixer import calculate_bgm_volume as _calc
+    return _calc(voice_path, voice_duration, default_volume)
+
+
 # SRT parsing helper methods.
 def parse_srt(srt_path: str) -> list:
     """
@@ -129,10 +158,10 @@ def parse_srt(srt_path: str) -> list:
         except Exception:
             return []
     
-    # Normalize line endings
+    # Chuẩn hóa line endings
     content = content.replace("\r\n", "\n")
     
-    # Pattern to match srt blocks
+    # Pattern khớp các block SRT chuẩn
     pattern = re.compile(
         r"(\d+)\s*\n"
         r"(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*\n"
@@ -152,9 +181,13 @@ def parse_srt(srt_path: str) -> list:
         if duration_us <= 0:
             continue
 
-        text = match.group(10).strip()
-        if not text:
+        raw_text = match.group(10).strip()
+        if not raw_text:
             continue
+            
+        # Dynamic Caption Auto-Wrap: break any sentence > 8 words into two lines (\n) for 9:16 framing
+        text = auto_wrap_subtitle(raw_text, max_words=8)
+
         results.append({
             "start": start_us,
             "end": end_us,
@@ -175,9 +208,10 @@ def _prepare_overlay_asset(
     prefix: str,
     similarity: float = 0.18,
     blend: float = 0.08,
+    cancel_check: Any = None,
 ) -> Path:
     from core.chroma import prepare_overlay_asset
-    return prepare_overlay_asset(source, bg_mode, output_dir, prefix, similarity, blend)
+    return prepare_overlay_asset(source, bg_mode, output_dir, prefix, similarity, blend, cancel_check=cancel_check)
 
 @handle_partial_draft
 def create_local_draft(
@@ -202,7 +236,7 @@ def create_local_draft(
     """
     import time as _time
     import shutil as _shutil
-    from app.path_validation import validate_project_name
+    from core.path_validation import validate_project_name
     from app.job_control import raise_if_cancelled
 
     # Validate project name and safety
@@ -453,7 +487,7 @@ def create_draft_from_files(
     """
     import time as _time
     import shutil as _shutil
-    from app.path_validation import validate_project_name
+    from core.path_validation import validate_project_name
     from app.job_control import raise_if_cancelled
 
     # Validate project name and safety
@@ -534,10 +568,13 @@ def create_draft_from_files(
         target_bgm_duration = voice_duration if voice_duration > 0 else bgm_material.duration
         bgm_duration = min(bgm_material.duration, target_bgm_duration)
         if bgm_duration > 0:
+            # Audio Auto-Ducking (20%): Scale BGM volume to 0.2 if voice narration is present
+            bgm_volume = calculate_bgm_volume(voice_path, voice_duration)
             bgm_segment = draft.AudioSegment(
                 material=bgm_material,
                 target_timerange=draft.trange(start=intro_duration, duration=bgm_duration),
-                source_timerange=draft.trange(start=0, duration=bgm_duration)
+                source_timerange=draft.trange(start=0, duration=bgm_duration),
+                volume=bgm_volume
             )
             script.add_segment(bgm_segment, bgm_track_name)
             bgm_segments_added += 1
@@ -637,6 +674,7 @@ def create_draft_from_files(
             prefix="logo",
             similarity=chroma_threshold / 100.0,
             blend=chroma_shadow / 100.0,
+            cancel_check=cancel_check,
         )
         raise_if_cancelled(cancel_check)
         logo_track_name = "long_story_logo"
@@ -682,6 +720,7 @@ def create_draft_from_files(
             prefix="animation",
             similarity=chroma_threshold / 100.0,
             blend=chroma_shadow / 100.0,
+            cancel_check=cancel_check,
         )
         raise_if_cancelled(cancel_check)
         anim_track_name = "long_story_anim"

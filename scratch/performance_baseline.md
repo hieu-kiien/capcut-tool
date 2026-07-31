@@ -9,13 +9,13 @@
 ## Repeated Measurements
 | Phase | Median | Min | Max |
 | :--- | ---: | ---: | ---: |
-| Discovery | 0.054437s | 0.051660s | 0.057135s |
-| Mock scan/probe | 0.441133s | 0.411974s | 0.461341s |
-| Timeline planning | 1.294102s | 1.274550s | 1.331602s |
-| Draft creation, cached | 3.846659s | 3.736676s | 3.884536s |
-| Draft creation, uncached | 4.209577s | 4.036631s | 4.803974s |
-| Pretty serialization | 0.904566s | 0.856064s | 0.976512s |
-| Compact serialization | 0.775874s | 0.716998s | 0.813325s |
+| Discovery | 0.054757s | 0.050014s | 0.063806s |
+| Mock scan/probe | 0.480982s | 0.404999s | 0.507931s |
+| Timeline planning | 1.328382s | 1.255618s | 1.417396s |
+| Draft creation, cached | 4.021734s | 3.780976s | 4.096135s |
+| Draft creation, uncached | 4.264534s | 4.176871s | 4.384845s |
+| Pretty serialization | 0.939673s | 0.891530s | 1.027166s |
+| Compact serialization | 0.766857s | 0.733491s | 0.805148s |
 
 ## Probe Calls
 - Mock scan: 600

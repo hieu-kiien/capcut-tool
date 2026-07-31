@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QFileDialog,
 )
+from app.icons import get_svg_icon
 from app.presets import KEYFRAME_PRESETS, TRANSITION_PRESETS, load_all_presets, add_custom_preset, delete_custom_preset
 
 class EffectsWidget(QWidget):
@@ -31,7 +32,23 @@ class EffectsWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # Page Header
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setSpacing(4)
+
+        lbl_title = QLabel("Hiệu ứng & Thương hiệu")
+        lbl_title.setObjectName("pageTitle")
+        lbl_subtitle = QLabel("Chèn logo thương hiệu, thêm video hiệu ứng tương tác và tuỳ chỉnh thuộc tính chuyển động (keyframes/transitions).")
+        lbl_subtitle.setObjectName("pageSubtitle")
+
+        header_layout.addWidget(lbl_title)
+        header_layout.addWidget(lbl_subtitle)
+        layout.addWidget(header_widget)
 
         kf_scroll = QScrollArea()
         kf_scroll.setWidgetResizable(True)
@@ -40,7 +57,7 @@ class EffectsWidget(QWidget):
         
         kf_content = QWidget()
         kf_layout = QVBoxLayout(kf_content)
-        kf_layout.setContentsMargins(0, 0, 10, 0)
+        kf_layout.setContentsMargins(0, 0, 0, 0)
         kf_layout.setSpacing(15)
 
         # 1. LOGO CARD
@@ -306,7 +323,8 @@ class EffectsWidget(QWidget):
         self.kf_preset_combo = QComboBox()
         self.kf_preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         
-        self.btn_delete_preset = QPushButton("❌ Xóa")
+        self.btn_delete_preset = QPushButton(" Xóa")
+        self.btn_delete_preset.setIcon(get_svg_icon("trash", color="#ef4444", size=14))
         self.btn_delete_preset.setObjectName("btnBrowse")
         self.btn_delete_preset.clicked.connect(self._on_delete_preset_clicked)
         self.btn_delete_preset.setEnabled(False)
@@ -476,7 +494,8 @@ class EffectsWidget(QWidget):
         self.custom_desc_lbl.setObjectName("appSubtitle")
         custom_form.addRow(self.custom_desc_lbl)
         
-        self.btn_save_custom = QPushButton("💾 Lưu thành Preset")
+        self.btn_save_custom = QPushButton(" Lưu thành Preset")
+        self.btn_save_custom.setIcon(get_svg_icon("save", color="#00F2FE", size=14))
         self.btn_save_custom.setObjectName("btnBrowse")
         self.btn_save_custom.clicked.connect(self._on_save_custom_preset_clicked)
         custom_form.addRow("", self.btn_save_custom)
@@ -641,7 +660,7 @@ class EffectsWidget(QWidget):
     def _update_anim_preview(self) -> None:
         path = self.anim_path.text().strip()
         if path:
-            self.anim_preview_label.setText(f"📹  {os.path.basename(path)}")
+            self.anim_preview_label.setText(f"{os.path.basename(path)}")
         else:
             self.anim_preview_label.setText("Chưa chọn tệp video hoạt ảnh")
 
