@@ -1,10 +1,31 @@
 # CHANGELOG: CapCut Long Story Studio
 
-All notable changes to the CapCut Long Story Studio project will be documented in this file.
+> **This is the technical history** — fixes, refactors and internal audits, including work that never reaches a release note. Release notes live in [`MVP_CHANGELOG.md`](MVP_CHANGELOG.md), which also defines the project version.
+>
+> Entries here are not versioned releases. `[1.0.0-docs]` below was a documentation milestone, not a product version.
 
 ---
 
-## [Unreleased] - 2026-06-19
+## [Unreleased] - 2026-08-07
+
+### Fixed
+* Fixed a deadlock in `BatchQueueManager` that hung the build queue whenever a job finished or failed synchronously. `_finish_current_job()` chains into `_run_next_job()`, which acquires `self._mutex`; the mutex was a non-reentrant `QMutex`, so re-entry on the same thread blocked forever. Changed to `QRecursiveMutex`. This also unblocked the full test suite, which had been hanging indefinitely at `tests/test_build_queue.py::test_queue_run_next_logic`.
+* Declared the missing `pillow` dependency. `core/chroma.py` imports `PIL.Image` to strip solid-color backgrounds from logo/overlay images, but `requirements.txt` never listed it, so a clean install failed at runtime with `RuntimeError: Thiếu Pillow để xóa nền ảnh logo`.
+* Removed `sqlite3`, `imageio` and `imageio_ffmpeg` from the PyInstaller exclude list in `scripts/build_exe.py`. All three are imported by the application — `sqlite3` by `core/db.py` at startup, `imageio` by `pyJianYingDraft/local_materials.py` for GIF durations, `imageio_ffmpeg` by `runtime_tools.py` as the FFmpeg resolver fallback. Any EXE built by that script would have shipped broken.
+
+### Added
+* Added `pytest-timeout` with a 120s per-test ceiling in `pytest.ini`, so a deadlocked test can no longer hang the suite or consume the CI job's full time budget without output.
+
+### Changed
+* Relaxed the `pytest<9` pin in `requirements-dev.txt`; it conflicted with the pytest 9.x already used locally, meaning CI and developer machines ran different major versions.
+
+### Documentation
+* Corrected three inverted or stale claims in `CODE_AUDIT.md`, `PROJECT_MAP.md` and `BACKLOG.md`: pillow was described as an unused dependency to remove (it was used but undeclared); `pyJianYingDraft/template_mode.py` was described as entirely dead code slated for deletion (it is live on the draft-load path via `ScriptFile.load_template`); and the `pyJianYingDraft` → `app` circular dependency no longer exists.
+* Corrected the path of the security validator across seven documents: `app/path_validation.py` → `core/path_validation.py`. The old path does not exist, while `AGENT_CONTEXT.md` mandated its use.
+* Recorded verified test counts. The previous figures (`86/86`, `90/90`) disagreed with each other and with the suite, because the deadlock above made a full run impossible.
+* Documented two previously unrecorded defects: the PyInstaller mis-exclusion (`CODE_AUDIT.md` §5A) and a `core` → `app` layering violation in `core/chroma.py` (§6C).
+
+## [Superseded] - 2026-06-19
 
 ### Added
 * Added bounded, thread-safe media probe caching with file-change invalidation and in-flight probe sharing.
@@ -46,7 +67,7 @@ All notable changes to the CapCut Long Story Studio project will be documented i
 
 ### Added
 *   **CapCut PC Integration**: Core pipeline mapping voice tracks, SRT subtitles, BGM, and background directories directly to CapCut draft timelines.
-*   **Path Validation Security**: Integrated strict traversal protections in [app/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/app/path_validation.py).
+*   **Path Validation Security**: Integrated strict traversal protections in [core/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/core/path_validation.py).
 *   **Media Downloader Wrapper**: Implemented yt-dlp & gallery-dl UI wrapper with multi-threaded downloads, url validation, and cookies integration.
 *   **Diagnostics & Recovery**: Integrated `Draft Doctor` for timeline self-healing and path recovery, and `app/draft_lock.py` for cross-process file lock safety.
 *   **Subprocess Execution Safety**: Added execution timeout limits on all `ffprobe` and `ffmpeg` commands.

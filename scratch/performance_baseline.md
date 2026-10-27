@@ -9,13 +9,13 @@
 ## Repeated Measurements
 | Phase | Median | Min | Max |
 | :--- | ---: | ---: | ---: |
-| Discovery | 0.054757s | 0.050014s | 0.063806s |
-| Mock scan/probe | 0.480982s | 0.404999s | 0.507931s |
-| Timeline planning | 1.328382s | 1.255618s | 1.417396s |
-| Draft creation, cached | 4.021734s | 3.780976s | 4.096135s |
-| Draft creation, uncached | 4.264534s | 4.176871s | 4.384845s |
-| Pretty serialization | 0.939673s | 0.891530s | 1.027166s |
-| Compact serialization | 0.766857s | 0.733491s | 0.805148s |
+| Discovery | 0.002484s | 0.002302s | 0.002587s |
+| Mock scan/probe | 0.358184s | 0.354058s | 0.366790s |
+| Timeline planning | 1.279436s | 1.273156s | 1.298759s |
+| Draft creation, cached | 0.935453s | 0.926437s | 0.971798s |
+| Draft creation, uncached | 1.168135s | 1.141562s | 1.224446s |
+| Pretty serialization | 0.779360s | 0.764498s | 0.809840s |
+| Compact serialization | 0.654877s | 0.639672s | 0.666058s |
 
 ## Probe Calls
 - Mock scan: 600
@@ -24,9 +24,9 @@
 - Real ffprobe: SKIPPED: set CAPCUT_BENCHMARK_MEDIA_DIR to a folder with valid media
 
 ## Serialization
-- Pretty size: 9.42 MB
-- Compact size: 3.76 MB (-60.1%)
-- Pretty median peak RAM: 28.03 MB
-- Compact median peak RAM: 7.52 MB (-73.2%)
+- Pretty size: 9.41 MB
+- Compact size: 3.74 MB (-60.2%)
+- Pretty median peak RAM: 27.99 MB
+- Compact median peak RAM: 7.49 MB (-73.2%)
 
 Mock timings validate Python call paths only. They do not measure real ffprobe CPU usage.

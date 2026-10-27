@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CapCut Long Story Studio",
-  "version": "2.0.0",
-  "identifier": "com.capcut.longstorystudio",
+  "productName": "CapCut Long Story Studio (Experimental)",
+  "version": "0.0.1-experimental",
+  "identifier": "com.capcut.longstorystudio.experimental",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

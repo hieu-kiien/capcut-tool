@@ -255,7 +255,7 @@ class ProfileController(QObject):
         if success:
             self.main_window._append_log(f"[HỆ THỐNG] Đã lưu thay đổi vào hồ sơ '{self.main_window._current_profile_name}' thành công.")
             if not silent and hasattr(self.main_window, "show_toast"):
-                self.main_window.show_toast("Thành công ✨", f"Đã lưu cấu hình hồ sơ '{self.main_window._current_profile_name}' thành công!", level="success")
+                self.main_window.show_toast("Thành công", f"Đã lưu cấu hình hồ sơ '{self.main_window._current_profile_name}' thành công!", level="success")
         else:
             self.main_window._append_log("[LỖI] Không thể cập nhật hồ sơ cấu hình.")
 

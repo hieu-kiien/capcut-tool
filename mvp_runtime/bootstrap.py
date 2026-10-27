@@ -79,20 +79,25 @@ def run_app(argv: Sequence[str] | None = None) -> int:
         )
         return 3
 
-    _install_default_font(app)
+    try:
+        _install_default_font(app)
 
-    from core.db import Database
-    from app.gui import MainWindow
+        from core.db import Database
+        from app.gui import MainWindow
 
-    Database.init_db()
-    window = MainWindow()
-    window.show()
+        Database.init_db()
+        window = MainWindow()
+        window.show()
 
-    app.aboutToQuit.connect(lambda: logger.info("Application shutting down"))
-    logger.info("Application started: version=%s", APP_VERSION)
-    exit_code = app.exec()
-    lock.unlock()
-    return exit_code
+        app.aboutToQuit.connect(lambda: logger.info("Application shutting down"))
+        logger.info("Application started: version=%s", APP_VERSION)
+        exit_code = app.exec()
+        return exit_code
+    finally:
+        try:
+            lock.unlock()
+        except Exception:
+            pass
 
 
 def _install_default_font(app) -> None:  # type: ignore[no-untyped-def]

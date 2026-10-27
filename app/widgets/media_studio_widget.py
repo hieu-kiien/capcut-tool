@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView
 )
 from app.icons import get_svg_icon
+from app.widgets.setup_widget import DropLineEdit
 from assets.manager import AssetManager
 from app.downloader import YtDlpDownloadRunner, DownloadOptions, parse_url_list
 
@@ -116,6 +117,11 @@ class CutterWorker(QThread):
         self.dest_path = dest_path
         self.start_sec = start_sec
         self.duration_sec = duration_sec
+        import threading
+        self._cancel_event = threading.Event()
+
+    def cancel(self):
+        self._cancel_event.set()
 
     def run(self):
         try:
@@ -125,7 +131,8 @@ class CutterWorker(QThread):
                 self.dest_path,
                 self.start_sec,
                 self.duration_sec,
-                log_callback=self.on_log
+                log_callback=self.on_log,
+                cancel_event=self._cancel_event
             )
             self.finished_signal.emit(str(output))
         except Exception as e:
@@ -181,6 +188,7 @@ class MediaStudioWidget(QWidget):
         self.import_worker = None
         self.dl_thread = None
         self.cutter_worker = None
+        self._thumb_cache: dict[str, QPixmap] = {}
         self._build_ui()
         self.refresh_library()
 
@@ -540,7 +548,7 @@ class MediaStudioWidget(QWidget):
         form_layout.setLabelAlignment(Qt.AlignRight)
 
         # Output folder row
-        self.download_out_edit = QLineEdit()
+        self.download_out_edit = DropLineEdit()
         self.download_out_edit.setPlaceholderText("Thư mục lưu tệp tải về...")
         self.download_out_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
         btn_browse_out = QPushButton()
@@ -555,7 +563,7 @@ class MediaStudioWidget(QWidget):
         form_layout.addRow("Lưu vào:", out_layout)
 
         # Cookies row
-        self.download_cookies_edit = QLineEdit()
+        self.download_cookies_edit = DropLineEdit()
         self.download_cookies_edit.setPlaceholderText("Đường dẫn file cookies (không bắt buộc)...")
         self.download_cookies_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
         btn_browse_cookies = QPushButton()
@@ -723,7 +731,7 @@ class MediaStudioWidget(QWidget):
         form.setLabelAlignment(Qt.AlignRight)
 
         # Source video file
-        self.cutter_source_edit = QLineEdit()
+        self.cutter_source_edit = DropLineEdit()
         self.cutter_source_edit.setPlaceholderText("Đường dẫn tệp video nguồn cần cắt...")
         self.cutter_source_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
         btn_browse_src = QPushButton()
@@ -761,7 +769,7 @@ class MediaStudioWidget(QWidget):
         form.addRow("Bắt đầu từ:", time_layout)
 
         # Output video file
-        self.cutter_dest_edit = QLineEdit()
+        self.cutter_dest_edit = DropLineEdit()
         self.cutter_dest_edit.setPlaceholderText("Đường dẫn lưu tệp video đã cắt...")
         self.cutter_dest_edit.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT_WHITE}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 4px; padding: 4px;")
         btn_browse_dst = QPushButton()
@@ -830,7 +838,12 @@ class MediaStudioWidget(QWidget):
             padding: 6px;
         """)
         self.cutter_log_text.setMaximumHeight(100)
+        self.cutter_log_text.setMaximumBlockCount(1000)
         cut_layout.addWidget(self.cutter_log_text)
+
+        # Action buttons row
+        cut_btn_row = QHBoxLayout()
+        cut_btn_row.setSpacing(8)
 
         # Run button
         self.btn_run_cut = QPushButton(" Bắt đầu cắt (Lossless Cut)")
@@ -853,7 +866,27 @@ class MediaStudioWidget(QWidget):
             }}
         """)
         self.btn_run_cut.clicked.connect(self._on_start_cutting)
-        cut_layout.addWidget(self.btn_run_cut)
+        cut_btn_row.addWidget(self.btn_run_cut, 3)
+
+        self.btn_cancel_cut = QPushButton(" Hủy")
+        self.btn_cancel_cut.setVisible(False)
+        self.btn_cancel_cut.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ERROR};
+                color: #ffffff;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+            }}
+            QPushButton:hover {{
+                background-color: #dc2626;
+            }}
+        """)
+        self.btn_cancel_cut.clicked.connect(self._on_cancel_cutting)
+        cut_btn_row.addWidget(self.btn_cancel_cut, 1)
+
+        cut_layout.addLayout(cut_btn_row)
 
         layout.addWidget(cut_card, 1)
 
@@ -1313,7 +1346,7 @@ class MediaStudioWidget(QWidget):
                 border-radius: 6px;
             }
             QFrame:hover {
-                border-color: #0dd3ba;
+                border-color: #00F2FE;
             }
         """)
         card.setFixedSize(115, 130)
@@ -1331,14 +1364,28 @@ class MediaStudioWidget(QWidget):
         path = asset["path"]
         
         if not is_video and os.path.exists(path):
-            pixmap = QPixmap(path)
-            if not pixmap.isNull():
-                lbl_thumb.setPixmap(pixmap.scaled(103, 62, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            if path in self._thumb_cache:
+                scaled_pixmap = self._thumb_cache[path]
             else:
-                lbl_thumb.setText("🖼️ Ảnh")
+                raw_pixmap = QPixmap(path)
+                if not raw_pixmap.isNull():
+                    scaled_pixmap = raw_pixmap.scaled(103, 62, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    if len(self._thumb_cache) < 300:
+                        self._thumb_cache[path] = scaled_pixmap
+                else:
+                    scaled_pixmap = None
+                    
+            if scaled_pixmap:
+                lbl_thumb.setPixmap(scaled_pixmap)
+            else:
+                icon_img = get_svg_icon("image", color=COLOR_TEXT_SECONDARY, size=24)
+                lbl_thumb.setPixmap(icon_img.pixmap(24, 24))
         else:
-            lbl_thumb.setText("🎥 Video" if is_video else "📁 Tệp")
-            lbl_thumb.setStyleSheet("background-color: #0b0f19; border-radius: 4px; color: #0dd3ba; font-weight: bold; border: none;")
+            icon_name = "video" if is_video else "file"
+            icon_color = COLOR_TEAL if is_video else COLOR_TEXT_SECONDARY
+            icon_media = get_svg_icon(icon_name, color=icon_color, size=24)
+            lbl_thumb.setPixmap(icon_media.pixmap(24, 24))
+            lbl_thumb.setStyleSheet("background-color: #0b0f19; border-radius: 4px; border: none;")
             
         layout.addWidget(lbl_thumb)
         
@@ -1421,6 +1468,8 @@ class MediaStudioWidget(QWidget):
             return
 
         self.btn_run_cut.setEnabled(False)
+        self.btn_cancel_cut.setVisible(True)
+        self.btn_cancel_cut.setEnabled(True)
         self.cutter_progress_bar.setVisible(True)
         self.cutter_log_text.clear()
         
@@ -1432,18 +1481,27 @@ class MediaStudioWidget(QWidget):
         self.log_requested.emit(f"[HỆ THỐNG] Bắt đầu cắt lossless từ {src_text}...")
         self.cutter_worker.start()
 
+    def _on_cancel_cutting(self) -> None:
+        if self.cutter_worker:
+            self.cutter_worker.cancel()
+            self.btn_cancel_cut.setEnabled(False)
+            self.cutter_log_text.appendPlainText("[HỆ THỐNG] Đang gửi tín hiệu hủy bỏ tiến trình cắt...")
+            self.log_requested.emit("[HỆ THỐNG] Đang gửi tín hiệu hủy bỏ tiến trình cắt...")
+
     def _on_cutter_log(self, msg: str) -> None:
         self.cutter_log_text.appendPlainText(msg)
         self.log_requested.emit(msg)
 
     def _on_cutter_error(self, err_msg: str) -> None:
         self.btn_run_cut.setEnabled(True)
+        self.btn_cancel_cut.setVisible(False)
         self.cutter_progress_bar.setVisible(False)
         QMessageBox.critical(self, "Lỗi cắt video", f"FFmpeg báo lỗi:\n{err_msg}")
         self.cutter_worker = None
 
     def _on_cutter_finished(self, out_path_str: str) -> None:
         self.btn_run_cut.setEnabled(True)
+        self.btn_cancel_cut.setVisible(False)
         self.cutter_progress_bar.setVisible(False)
         
         out_path = Path(out_path_str)

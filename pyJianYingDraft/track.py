@@ -113,6 +113,11 @@ class Track(BaseTrack, Generic[Seg_type]):
             raise TypeError("New segment (%s) is not of the same type as the track (%s)" % (type(segment), self.accept_segment_type))
 
         # 检查片段是否重叠
+        # Fast path: O(1) check when appending chronologically after the last segment
+        if not self.segments or segment.target_timerange.start >= self.segments[-1].target_timerange.end:
+            self.segments.append(segment)
+            return self
+
         for seg in self.segments:
             if seg.overlaps(segment):
                 raise SegmentOverlap("New segment overlaps with existing segment [start: {}, end: {}]"

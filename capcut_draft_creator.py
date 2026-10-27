@@ -5,6 +5,8 @@ import pyJianYingDraft as draft
 # Text classes from pyJianYingDraft removed since we don't write subtitles.
 from video_mixer import BackgroundSegment
 from core.effects import apply_karaoke_to_segment
+from core.logger import logger
+from core.job_control import raise_if_cancelled
 
 WRITING_MARKER_NAME = ".capcut_tool_writing"
 _IMAGE_OVERLAY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
@@ -81,7 +83,7 @@ def handle_partial_draft(func):
             try:
                 guard.clear_marker()
             except Exception as marker_err:
-                print(f"[DRAFT CREATOR] Warning: Could not remove marker: {marker_err}")
+                logger.warning(f"[DRAFT CREATOR] Warning: Could not remove marker: {marker_err}")
             
             if isinstance(res, dict):
                 res["backup_path"] = str(guard.backup_path) if guard.backup_path else None
@@ -98,11 +100,11 @@ def handle_partial_draft(func):
                         moved_marker.unlink()
                     guard.partial_path = partial_path
                     e.partial_path = str(partial_path)
-                    print(f"[DRAFT CREATOR] Cleaned up partial draft folder to {partial_path.name}")
+                    logger.info(f"[DRAFT CREATOR] Cleaned up partial draft folder to {partial_path.name}")
                 if guard.backup_path:
                     e.backup_path = str(guard.backup_path)
             except Exception as cleanup_err:
-                print(f"[DRAFT CREATOR] Warning: Could not clean up partial draft folder: {cleanup_err}")
+                logger.warning(f"[DRAFT CREATOR] Warning: Could not clean up partial draft folder: {cleanup_err}")
             raise e
     return wrapper
 
@@ -209,9 +211,10 @@ def _prepare_overlay_asset(
     similarity: float = 0.18,
     blend: float = 0.08,
     cancel_check: Any = None,
+    timeout_sec: float = 60.0,
 ) -> Path:
     from core.chroma import prepare_overlay_asset
-    return prepare_overlay_asset(source, bg_mode, output_dir, prefix, similarity, blend, cancel_check=cancel_check)
+    return prepare_overlay_asset(source, bg_mode, output_dir, prefix, similarity, blend, cancel_check=cancel_check, timeout_sec=timeout_sec)
 
 @handle_partial_draft
 def create_local_draft(
@@ -256,7 +259,7 @@ def create_local_draft(
             counter += 1
         try:
             _shutil.move(str(resolved_draft_path), str(backup_path))
-            print(f"[DRAFT CREATOR] Backed up existing draft folder to {backup_path.name}")
+            logger.info(f"[DRAFT CREATOR] Backed up existing draft folder to {backup_path.name}")
             if guard:
                 guard.backup_path = backup_path
         except Exception as e:
@@ -272,7 +275,7 @@ def create_local_draft(
         else:
             (resolved_draft_path / WRITING_MARKER_NAME).touch()
     except Exception as marker_err:
-        print(f"[DRAFT CREATOR] Warning: Could not create marker file: {marker_err}")
+        logger.warning(f"[DRAFT CREATOR] Warning: Could not create marker file: {marker_err}")
 
     raise_if_cancelled(cancel_check)
     
@@ -304,7 +307,7 @@ def create_local_draft(
     if srt_path and os.path.exists(srt_path):
         subtitles = parse_srt(srt_path)
         if not subtitles:
-            print(f"[DRAFT CREATOR] WARNING: SRT file '{srt_path}' is empty or failed to parse. Falling back to even distribution mode.")
+            logger.warning(f"[DRAFT CREATOR] WARNING: SRT file '{srt_path}' is empty or failed to parse. Falling back to even distribution mode.")
         
     if subtitles:
         text_track_name = "subtitles_track"
@@ -333,7 +336,7 @@ def create_local_draft(
                 shadow=shadow
             )
             script.add_segment(text_segment, text_track_name)
-        print(f"[DRAFT CREATOR] Added {len(subtitles)} subtitles from SRT file.")
+        logger.info(f"[DRAFT CREATOR] Added {len(subtitles)} subtitles from SRT file.")
         
     # 6. Process media files (images or videos)
     valid_media_paths = [p for p in media_paths if os.path.exists(p)]
@@ -344,7 +347,7 @@ def create_local_draft(
         
     if subtitles:
         # Paragraph-based matching for storytelling
-        print(f"[DRAFT CREATOR] Aligning {len(valid_media_paths)} media files to {len(subtitles)} subtitle scenes...")
+        logger.info(f"[DRAFT CREATOR] Aligning {len(valid_media_paths)} media files to {len(subtitles)} subtitle scenes...")
         for idx, sub in enumerate(subtitles):
             raise_if_cancelled(cancel_check)
             start_time = sub["start"]
@@ -506,7 +509,7 @@ def create_draft_from_files(
             counter += 1
         try:
             _shutil.move(str(resolved_draft_path), str(backup_path))
-            print(f"[DRAFT CREATOR] Backed up existing draft folder to {backup_path.name}")
+            logger.info(f"[DRAFT CREATOR] Backed up existing draft folder to {backup_path.name}")
             if guard:
                 guard.backup_path = backup_path
         except Exception as e:
@@ -521,7 +524,7 @@ def create_draft_from_files(
         else:
             (resolved_draft_path / WRITING_MARKER_NAME).touch()
     except Exception as marker_err:
-        print(f"[DRAFT CREATOR] Warning: Could not create marker file: {marker_err}")
+        logger.warning(f"[DRAFT CREATOR] Warning: Could not create marker file: {marker_err}")
 
     raise_if_cancelled(cancel_check)
 
@@ -662,7 +665,7 @@ def create_draft_from_files(
                     apply_karaoke_to_segment(text_segment, sub["duration"])
                 script.add_segment(text_segment, text_track_name)
                 subtitle_segments_added += 1
-            print(f"[DRAFT CREATOR] Added {subtitle_segments_added} subtitles from SRT file.")
+            logger.info(f"[DRAFT CREATOR] Added {subtitle_segments_added} subtitles from SRT file.")
 
     # Add Logo overlay if provided
     logo_segments_added = 0
@@ -708,7 +711,7 @@ def create_draft_from_files(
         )
         script.add_segment(logo_segment, logo_track_name)
         logo_segments_added += 1
-        print(f"[DRAFT CREATOR] Added logo overlay track at {logo_position}.")
+        logger.info(f"[DRAFT CREATOR] Added logo overlay track at {logo_position}.")
 
     # Add Animation overlay if provided
     anim_segments_added = 0
@@ -774,7 +777,7 @@ def create_draft_from_files(
             )
             script.add_segment(anim_segment, anim_track_name)
             anim_segments_added += 1
-        print(f"[DRAFT CREATOR] Added {anim_segments_added} overlay animation segments ({anim_timing}).")
+        logger.info(f"[DRAFT CREATOR] Added {anim_segments_added} overlay animation segments ({anim_timing}).")
 
     raise_if_cancelled(cancel_check)
 
@@ -798,20 +801,27 @@ def _add_background_segments(script, video_track_name: str, segments: List[Backg
     if not segments:
         return 0
 
-    from app.job_control import raise_if_cancelled
     material_cache = {}
+    path_cache = {}  # Cache (exists, resolved_str)
     added = 0
     for segment in segments:
         raise_if_cancelled(cancel_check)
-        media_path = Path(segment.path)
-        if not media_path.exists():
-            print(f"[DRAFT CREATOR] Missing background media, skipped: {media_path}")
+        raw_path = str(segment.path)
+        cached_info = path_cache.get(raw_path)
+        if cached_info is None:
+            p = Path(raw_path)
+            exists = p.exists()
+            cached_info = (exists, str(p.resolve()) if exists else None)
+            path_cache[raw_path] = cached_info
+
+        exists, resolved_key = cached_info
+        if not exists:
+            logger.warning(f"[DRAFT CREATOR] Missing background media, skipped: {raw_path}")
             continue
 
-        key = str(media_path.resolve())
-        if key not in material_cache:
-            material_cache[key] = draft.VideoMaterial(str(media_path))
-        video_material = material_cache[key]
+        if resolved_key not in material_cache:
+            material_cache[resolved_key] = draft.VideoMaterial(resolved_key)
+        video_material = material_cache[resolved_key]
 
         target_duration = max(1, int(segment.target_duration_us))
         source_start = max(0, int(segment.source_start_us))
@@ -859,7 +869,7 @@ def _add_background_segments(script, video_track_name: str, segments: List[Backg
             script.add_segment(video_segment, video_track_name)
             added += 1
 
-    print(f"[DRAFT CREATOR] Added {added} background media segments.")
+    logger.info(f"[DRAFT CREATOR] Added {added} background media segments.")
     return added
 
 

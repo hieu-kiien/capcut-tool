@@ -139,7 +139,7 @@ def get_application_stylesheet() -> str:
         }}
         QPushButton#navButton[active="true"] {{
             color: {COLOR_TEAL};
-            background-color: rgba(13, 211, 186, 0.08);
+            background-color: rgba(0, 242, 254, 0.10);
             font-weight: 600;
             border-left: 3px solid {COLOR_TEAL};
             border-top-left-radius: 0px;
@@ -178,8 +178,8 @@ def get_application_stylesheet() -> str:
             color: {COLOR_TEXT_SECONDARY};
         }}
         QLabel#badge {{
-            background-color: rgba(13, 211, 186, 0.15);
-            border: 1px solid rgba(13, 211, 186, 0.3);
+            background-color: rgba(0, 242, 254, 0.15);
+            border: 1px solid rgba(0, 242, 254, 0.3);
             color: {COLOR_TEAL};
             padding: 2px 6px;
             font-size: 10px;
@@ -260,9 +260,9 @@ def get_application_stylesheet() -> str:
             color: #f4f4f5;
         }}
         QPushButton#btnStyle:checked {{
-            background-color: rgba(13, 211, 186, 0.15);
+            background-color: rgba(0, 242, 254, 0.15);
             color: {COLOR_TEAL};
-            border: 1px solid rgba(13, 211, 186, 0.35);
+            border: 1px solid rgba(0, 242, 254, 0.35);
         }}
         QPushButton#settingsToggle {{
             background: transparent;
@@ -330,8 +330,8 @@ def get_application_stylesheet() -> str:
         }}
         
         QFrame#stepRow[state="done"] {{
-            border-color: rgba(13, 211, 186, 0.2);
-            background-color: rgba(13, 211, 186, 0.03);
+            border-color: rgba(0, 242, 254, 0.2);
+            background-color: rgba(0, 242, 254, 0.05);
         }}
         QFrame#stepRow[state="done"] QLabel#stepCircle {{
             border: 2px solid {COLOR_TEAL};
@@ -427,7 +427,7 @@ def get_application_stylesheet() -> str:
         
         /* 10. Control Buttons */
         QPushButton#btnRun, QPushButton#btnBuildNow, QPushButton#btnAddQueue {{
-            background-color: {COLOR_TEAL};
+            background: {GRADIENT_PRIMARY};
             color: #000000;
             border: none;
             border-radius: 6px;
@@ -436,10 +436,10 @@ def get_application_stylesheet() -> str:
             font-weight: 800;
         }}
         QPushButton#btnRun:hover, QPushButton#btnBuildNow:hover, QPushButton#btnAddQueue:hover {{
-            background-color: #0bc0a9;
+            opacity: 0.9;
         }}
         QPushButton#btnRun:disabled, QPushButton#btnBuildNow:disabled, QPushButton#btnAddQueue:disabled {{
-            background-color: {COLOR_CARD_BORDER};
+            background: {COLOR_CARD_BORDER};
             color: {COLOR_TEXT_SECONDARY};
         }}
         QPushButton#btnCancel {{
@@ -479,7 +479,7 @@ def get_application_stylesheet() -> str:
             background-color: {COLOR_SIDEBAR_BG};
             border: 1px solid {COLOR_CARD_BORDER};
             border-radius: 8px;
-            font-family: 'Consolas', 'JetBrains Mono', 'Cascadia Code', monospace;
+            font-family: {FONT_CONSOLE};
             font-size: 12px;
             padding: 10px;
             color: {COLOR_TEXT_MUTED};
@@ -515,8 +515,8 @@ def get_application_stylesheet() -> str:
             color: #e2e8f0;
         }}
         QMessageBox QPushButton {{
-            background-color: #312e81;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: {SURFACE_BG};
+            border: 1px solid {COLOR_CARD_BORDER};
             border-radius: 6px;
             padding: 6px 14px;
             color: #ffffff;
@@ -524,7 +524,8 @@ def get_application_stylesheet() -> str:
             min-width: 70px;
         }}
         QMessageBox QPushButton:hover {{
-            background-color: #4338ca;
+            background-color: rgba(255, 255, 255, 0.08);
+            border-color: {COLOR_TEAL};
         }}
         
         /* 14. Page Headers styling */

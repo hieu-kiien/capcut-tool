@@ -9,7 +9,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from app.icons import get_svg_icon
 from app.theme import (
     COLOR_TEAL, COLOR_CARD_BG, COLOR_CARD_BORDER, COLOR_ERROR, COLOR_SUCCESS,
-    COLOR_TEXT_PRIMARY, COLOR_TEXT_MUTED, COLOR_SIDEBAR_BG,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_MUTED, COLOR_SIDEBAR_BG, DARK_BG, FONT_CONSOLE,
     QCOLOR_TEAL, QCOLOR_DARK_ZINC, QCOLOR_CARD_BG, QCOLOR_CARD_BORDER,
     QCOLOR_TEXT_SECONDARY, QCOLOR_TEXT_MUTED, QCOLOR_ERROR, QCOLOR_SUCCESS,
     QCOLOR_TEXT_BLACK
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFrame,
     QScrollArea,
+    QSplitter,
     QRadioButton,
     QDoubleSpinBox,
     QSpinBox,
@@ -58,34 +59,6 @@ class SubtitlePreviewLabel(QLabel):
         self.shadow_enabled = shadow_enabled
         self.update()
 
-
-class DropLineEdit(QLineEdit):
-    """
-    Custom QLineEdit that accepts Drag & Drop of files/folders from Windows Explorer.
-    """
-    def __init__(self, placeholder="", parent=None):
-        super().__init__(parent)
-        self.setPlaceholderText(placeholder)
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
-            if urls:
-                local_path = urls[0].toLocalFile()
-                if local_path:
-                    self.setText(local_path)
-                    self.textChanged.emit(local_path)
-                    event.acceptProposedAction()
-
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -95,27 +68,32 @@ class DropLineEdit(QLineEdit):
 
         rect = self.rect()
         text = self.text()
-
-        path = QPainterPath()
+        if not text:
+            return
 
         fm = painter.fontMetrics()
-        text_w = fm.horizontalAdvance(text)
-        text_h = fm.height()
+        lines = text.split("\n")
+        line_height = fm.lineSpacing()
+        total_text_height = len(lines) * line_height
 
+        start_y = (rect.height() - total_text_height) / 2.0 + fm.ascent()
+
+        path = QPainterPath()
         align = self.alignment()
-        if align & Qt.AlignmentFlag.AlignLeft:
-            x = rect.x() + 10
-        elif align & Qt.AlignmentFlag.AlignRight:
-            x = rect.width() - text_w - 10
-        else:
-            x = (rect.width() - text_w) / 2.0
 
-        y = (rect.height() + text_h) / 2.0 - fm.descent()
-
-        path.addText(x, y, font, text)
+        for i, line in enumerate(lines):
+            line_w = fm.horizontalAdvance(line)
+            if align & Qt.AlignmentFlag.AlignLeft:
+                lx = rect.x() + 10.0
+            elif align & Qt.AlignmentFlag.AlignRight:
+                lx = rect.width() - line_w - 10.0
+            else:
+                lx = (rect.width() - line_w) / 2.0
+            ly = start_y + i * line_height
+            path.addText(lx, ly, font, line)
 
         # Draw shadow
-        if self.shadow_enabled:
+        if self.shadow_enabled and self.shadow_distance > 0 and self.shadow_alpha > 0:
             painter.save()
             shadow_offset = self.shadow_distance / 2.0
             painter.translate(shadow_offset, shadow_offset)
@@ -145,6 +123,47 @@ class DropLineEdit(QLineEdit):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(path)
         painter.restore()
+
+
+class DropLineEdit(QLineEdit):
+    """
+    Custom QLineEdit that accepts Drag & Drop of files/folders from Windows Explorer.
+    """
+    def __init__(self, placeholder="", parent=None):
+        super().__init__(parent)
+        if placeholder:
+            self.setPlaceholderText(placeholder)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            self.setStyleSheet("border: 1px solid #00F2FE;")
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet("")
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self.setStyleSheet("")
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls:
+                local_path = urls[0].toLocalFile()
+                if local_path:
+                    norm_path = os.path.normpath(local_path)
+                    self.setText(norm_path)
+                    event.acceptProposedAction()
+                    return
+        super().dropEvent(event)
 
 
 class AudioWaveformLoader(QThread):
@@ -351,7 +370,7 @@ class AudioWaveformWidget(QWidget):
             painter.drawRoundedRect(QRectF(x, y, width, bar_h), 1, 1)
 
         # Draw duration on the right
-        font_lbl = QFont("Inter", 8, QFont.Weight.Bold)
+        font_lbl = QFont("JetBrains Mono", 8, QFont.Weight.Bold)
         painter.setFont(font_lbl)
         dur_rect = QRectF(w - 110, h - 22, 100, 18)
         painter.setPen(QPen(QCOLOR_TEXT_MUTED))
@@ -441,7 +460,7 @@ class SetupWidget(QWidget):
                 border-color: {COLOR_TEAL};
             }}
             QPushButton:pressed {{
-                background-color: #0bc0a9;
+                background-color: {COLOR_TEAL};
             }}
         """
 
@@ -473,100 +492,130 @@ class SetupWidget(QWidget):
 
         layout.addWidget(header_widget)
 
-        # Scroll area for responsiveness
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # ---------------------------------------------------------
+        # COMMERCIAL STUDIO SINGLE-SCREEN 3-COLUMN STUDIO LAYOUT
+        # QSplitter: Left 25% (Assets) | Center 50% (Canvas & Timeline) | Right 25% (Keyframes & Build)
+        # ---------------------------------------------------------
+        self.studio_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.studio_splitter.setObjectName("studioSplitter")
+        self.splitter = self.studio_splitter
 
-        container = QWidget()
-        container_layout = QHBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(16)
+        # ==================== COLUMN 1: MATERIAL ASSETS (25%) ====================
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(4, 4, 8, 4)
+        left_layout.setSpacing(14)
 
-        # LEFT COLUMN Layout
-        left_side = QVBoxLayout()
-        left_side.setSpacing(15)
+        # 1. ÂM THANH CARD (Voice & BGM with Auto-Ducking)
+        audio_card = QFrame()
+        audio_card.setObjectName("configCard")
+        audio_layout = QVBoxLayout(audio_card)
+        audio_layout.setContentsMargins(14, 14, 14, 14)
+        audio_layout.setSpacing(10)
 
-        # 1. THÔNG TIN DỰ ÁN CARD
-        project_card = QFrame()
-        project_card.setObjectName("configCard")
-        project_layout = QVBoxLayout(project_card)
-        project_layout.setContentsMargins(16, 16, 16, 16)
-        project_layout.setSpacing(12)
+        audio_title = QLabel("Tài nguyên âm thanh")
+        audio_title.setObjectName("cardTitle")
+        audio_layout.addWidget(audio_title)
 
-        proj_title = QLabel("Thông tin dự án")
-        proj_title.setObjectName("cardTitle")
-        project_layout.addWidget(proj_title)
+        self.voice_path = DropLineEdit("Chọn tệp âm thanh giọng đọc chính (.mp3, .wav)...")
+        audio_layout.addWidget(self._create_field_label("Giọng đọc chính (Voice Audio)"))
+        audio_layout.addLayout(self._create_path_row(self.voice_path, "audio"))
 
-        self.project_name = QLineEdit("Du_An_CapCut")
-        self.project_name.setPlaceholderText("Tên dự án nháp CapCut (không viết dấu)...")
-        project_layout.addWidget(self._create_field_label("Tên dự án nháp"))
-        project_layout.addWidget(self.project_name)
+        # Voice Waveform Widget
+        self.waveform_widget = AudioWaveformWidget()
+        audio_layout.addWidget(self.waveform_widget)
 
-        self.draft_root = QLineEdit()
-        self.draft_root.setPlaceholderText("Thư mục lưu dự án nháp của CapCut...")
-        project_layout.addWidget(self._create_field_label("Thư mục dự án nháp CapCut (Draft Root)"))
-        project_layout.addLayout(self._create_path_row(self.draft_root, "folder"))
+        # Play/Pause controls
+        self.playback_controls = QHBoxLayout()
+        self.btn_play_voice = QPushButton(" Phát")
+        self.btn_play_voice.setIcon(get_svg_icon("play", color=COLOR_TEAL, size=14))
+        self.btn_play_voice.setEnabled(False)
+        self.btn_play_voice.clicked.connect(self._toggle_voice_playback)
+        self.playback_controls.addWidget(self.btn_play_voice)
 
-        self.media_dir = QLineEdit()
-        self.media_dir.setPlaceholderText("Thư mục chứa kho video/hình ảnh nền...")
-        project_layout.addWidget(self._create_field_label("Thư mục Video/Ảnh nền (Background Media)"))
-        project_layout.addLayout(self._create_path_row(self.media_dir, "folder"))
+        self.lbl_playback_time = QLabel("00:00 / 00:00")
+        self.lbl_playback_time.setStyleSheet(f"font-family: {FONT_CONSOLE}; color: #a1a1aa; font-size: 11px;")
+        self.playback_controls.addWidget(self.lbl_playback_time)
+        self.playback_controls.addStretch()
+        audio_layout.addLayout(self.playback_controls)
 
-        # Aspect ratio option inside project card
-        project_layout.addWidget(self._create_field_label("Tỷ lệ khung hình"))
-        ratio_layout = QHBoxLayout()
-        self.ratio_9_16 = QRadioButton("Dọc (9:16 Shorts/TikTok)")
-        self.ratio_9_16.setChecked(True)
-        self.ratio_16_9 = QRadioButton("Ngang (16:9 YouTube)")
-        ratio_layout.addWidget(self.ratio_9_16)
-        ratio_layout.addWidget(self.ratio_16_9)
-        project_layout.addLayout(ratio_layout)
+        # BGM Audio Path
+        self.bgm_path = DropLineEdit("Chọn nhạc nền lồng thêm (Không bắt buộc)...")
+        audio_layout.addWidget(self._create_field_label("Nhạc nền (BGM Audio - Tùy chọn)"))
+        audio_layout.addLayout(self._create_path_row(self.bgm_path, "audio"))
 
-        left_side.addWidget(project_card)
+        # BGM Waveform Widget
+        self.bgm_waveform_widget = AudioWaveformWidget()
+        audio_layout.addWidget(self.bgm_waveform_widget)
 
-        # 2. PHỤ ĐỀ (SRT) CARD
+        # Auto-Ducking 20% Rule Badge
+        ducking_badge = QLabel("● Audio Auto-Ducking: BGM tự động giảm còn 20% khi có Voice")
+        ducking_badge.setStyleSheet("color: #00F2FE; font-size: 10px; font-weight: 600; padding: 2px 0;")
+        audio_layout.addWidget(ducking_badge)
+
+        self.voice_path.textChanged.connect(self._on_voice_path_changed)
+        self.bgm_path.textChanged.connect(self._on_bgm_path_changed)
+        left_layout.addWidget(audio_card)
+
+        # 2. MEDIA NỀN CARD
+        media_card = QFrame()
+        media_card.setObjectName("configCard")
+        media_layout = QVBoxLayout(media_card)
+        media_layout.setContentsMargins(14, 14, 14, 14)
+        media_layout.setSpacing(10)
+
+        media_title = QLabel("Kho Media nền")
+        media_title.setObjectName("cardTitle")
+        media_layout.addWidget(media_title)
+
+        self.media_dir = DropLineEdit("Thư mục chứa kho video/hình ảnh nền...")
+        media_layout.addWidget(self._create_field_label("Thư mục Video/Ảnh nền (Background Media)"))
+        media_layout.addLayout(self._create_path_row(self.media_dir, "folder"))
+        self.media_dir.textChanged.connect(self._on_media_dir_changed_sync)
+        left_layout.addWidget(media_card)
+
+        # 3. PHỤ ĐỀ (SRT) CARD
         srt_card = QFrame()
         srt_card.setObjectName("configCard")
         srt_layout = QVBoxLayout(srt_card)
-        srt_layout.setContentsMargins(16, 16, 16, 16)
-        srt_layout.setSpacing(12)
+        srt_layout.setContentsMargins(14, 14, 14, 14)
+        srt_layout.setSpacing(10)
 
         srt_title = QLabel("Phụ đề (SRT)")
         srt_title.setObjectName("cardTitle")
         srt_layout.addWidget(srt_title)
 
-        self.srt_path = QLineEdit()
-        self.srt_path.setPlaceholderText("Chọn tệp phụ đề (.srt - Không bắt buộc)...")
+        self.srt_path = DropLineEdit("Chọn tệp phụ đề (.srt - Không bắt buộc)...")
         srt_layout.addWidget(self._create_field_label("Tệp phụ đề (SRT Subtitles - Tùy chọn)"))
         srt_layout.addLayout(self._create_path_row(self.srt_path, "srt"))
 
-        # Table of subtitles showing timestamps and checking warnings
+        # Table of subtitles
         self.sub_table = QTableWidget()
         self.sub_table.setColumnCount(5)
         self.sub_table.setHorizontalHeaderLabels(["STT", "Thời gian", "Độ dài", "Nội dung", "Trạng thái"])
         self.sub_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.sub_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.sub_table.setMinimumHeight(180)
+        self.sub_table.setMinimumHeight(150)
         self.sub_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.SelectedClicked)
+        self.sub_table.itemSelectionChanged.connect(self._on_sub_table_selection_changed)
         srt_layout.addWidget(self.sub_table)
 
         # Subtitle timing diagnostics footer
         diag_layout = QHBoxLayout()
-        diag_layout.setContentsMargins(4, 2, 4, 2)
-        diag_layout.setSpacing(10)
+        diag_layout.setContentsMargins(2, 2, 2, 2)
+        diag_layout.setSpacing(8)
 
         self.lbl_srt_diag = QLabel("Chưa tải tệp phụ đề.")
-        self.lbl_srt_diag.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 12px; font-weight: 500;")
+        self.lbl_srt_diag.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 11px; font-weight: 500;")
 
-        self.btn_check_timing = QPushButton(" Kiểm tra thời gian")
+        self.btn_check_timing = QPushButton(" Kiểm tra")
         self.btn_check_timing.setIcon(get_svg_icon("clock", color=COLOR_TEXT_PRIMARY, size=12))
         self.btn_check_timing.setStyleSheet(f"""
             QPushButton {{
                 background-color: {COLOR_SIDEBAR_BG};
                 border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 4px;
-                padding: 4px 10px;
+                padding: 4px 8px;
                 color: {COLOR_TEXT_PRIMARY};
                 font-size: 11px;
                 font-weight: 600;
@@ -575,9 +624,6 @@ class SetupWidget(QWidget):
                 background-color: {COLOR_TEAL};
                 color: #000000;
                 border-color: {COLOR_TEAL};
-            }}
-            QPushButton:pressed {{
-                background-color: #0bc0a9;
             }}
         """)
         self.btn_check_timing.clicked.connect(self._on_check_timing_clicked)
@@ -595,214 +641,51 @@ class SetupWidget(QWidget):
         srt_layout.addWidget(self.btn_save_srt)
 
         self.srt_path.textChanged.connect(self._on_srt_path_changed)
+        left_layout.addWidget(srt_card)
 
-        left_side.addWidget(srt_card)
+        # ==================== COLUMN 2: CANVAS PREVIEW & TIMELINE (50%) ====================
+        center_widget = QWidget()
+        center_layout = QVBoxLayout(center_widget)
+        center_layout.setContentsMargins(6, 4, 6, 4)
+        center_layout.setSpacing(14)
 
-        # Collapsible advanced settings
-        self.settings_toggle = QPushButton(" Cài đặt nâng cao & Giao diện")
-        self.settings_toggle.setIcon(get_svg_icon("settings", color=COLOR_TEAL, size=14))
-        self.settings_toggle.setObjectName("settingsToggle")
-        self.settings_toggle.setCheckable(True)
-        self.settings_toggle.setChecked(False)
-        self.settings_toggle.clicked.connect(self._toggle_advanced_settings)
-        left_side.addWidget(self.settings_toggle)
-
-        self.settings_frame = QFrame()
-        self.settings_frame.setObjectName("settingsFrame")
-        settings_grid = QGridLayout(self.settings_frame)
-        settings_grid.setContentsMargins(10, 10, 10, 10)
-        settings_grid.setSpacing(12)
-
-        # Slicing timers
-        settings_grid.addWidget(self._create_field_label("Độ dài clip nền tối thiểu (giây)"), 0, 0)
-        self.clip_min = QDoubleSpinBox()
-        self.clip_min.setRange(0.5, 86400.0)
-        self.clip_min.setValue(5.0)
-        self.clip_min.setSingleStep(0.5)
-        settings_grid.addWidget(self.clip_min, 0, 1)
-
-        settings_grid.addWidget(self._create_field_label("Độ dài clip nền tối đa (giây)"), 1, 0)
-        self.clip_max = QDoubleSpinBox()
-        self.clip_max.setRange(0.5, 86400.0)
-        self.clip_max.setValue(9.0)
-        self.clip_max.setSingleStep(0.5)
-        settings_grid.addWidget(self.clip_max, 1, 1)
-
-        # Selection Mode
-        settings_grid.addWidget(self._create_field_label("Cách trộn video nền"), 2, 0)
-        self.selection_mode = QComboBox()
-        self.selection_mode.addItems([
-            "Trộn ngẫu nhiên (shuffle_bag)",
-            "Lần lượt (sequential)",
-            "Ngẫu nhiên (random)",
-            "Nhân bản rồi trộn toàn bộ (duplicate_then_shuffle)",
-            "Nhân bản rồi trộn phần nhân bản (shuffle_duplicates_only)"
-        ])
-        settings_grid.addWidget(self.selection_mode, 2, 1)
-
-        # Short video handling mode
-        settings_grid.addWidget(self._create_field_label("Xử lý video ngắn hơn voice"), 3, 0)
-        self.short_video_mode = QComboBox()
-        self.short_video_mode.addItems([
-            "Kéo giãn / Đổi tốc độ (stretch)",
-            "Tự động lặp lại (loop)"
-        ])
-        settings_grid.addWidget(self.short_video_mode, 3, 1)
-
-        # Background Switch Mode
-        settings_grid.addWidget(self._create_field_label("Quy tắc chuyển cảnh nền"), 4, 0)
-        self.bg_switch_mode = QComboBox()
-        self.bg_switch_mode.addItem("Theo thời gian cố định / ngẫu nhiên", "time")
-        self.bg_switch_mode.addItem("Theo từng câu phụ đề SRT", "subtitle")
-        self.bg_switch_mode.addItem("Theo cụm câu phụ đề (Gom nhóm)", "subtitle_group")
-        settings_grid.addWidget(self.bg_switch_mode, 4, 1)
-
-        # Group size (Subtitle group)
-        self.bg_switch_group_label = self._create_field_label("Số câu thoại mỗi cảnh")
-        settings_grid.addWidget(self.bg_switch_group_label, 5, 0)
-        self.bg_switch_group_size = QSpinBox()
-        self.bg_switch_group_size.setRange(1, 50)
-        self.bg_switch_group_size.setValue(3)
-        settings_grid.addWidget(self.bg_switch_group_size, 5, 1)
-
-        self.bg_switch_mode.currentIndexChanged.connect(self._on_bg_switch_mode_changed)
-
-        self.recursive_scan = QCheckBox("Quét cả thư mục con (Recursive)")
-        self.recursive_scan.setChecked(False)
-        settings_grid.addWidget(self.recursive_scan, 6, 0, 1, 2)
-
-        # Auto-apply settings inside draft pipeline
-        settings_grid.addWidget(self._create_field_label("Tự động thêm Keyframe (Auto Keyframe)"), 7, 0)
-        self.auto_kf_combo = QComboBox()
-        self.auto_kf_combo.addItem("Không áp dụng (None)", "none")
-        self.auto_kf_combo.addItem("Trộn ngẫu nhiên (Random)", "random")
-        for p in KEYFRAME_PRESETS:
-            self.auto_kf_combo.addItem(p["name"], p["id"])
-        settings_grid.addWidget(self.auto_kf_combo, 7, 1)
-
-        settings_grid.addWidget(self._create_field_label("Tự động thêm Chuyển cảnh (Auto Transition)"), 8, 0)
-        self.auto_trans_combo = QComboBox()
-        self.auto_trans_combo.addItem("Không áp dụng (None)", "none")
-        self.auto_trans_combo.addItem("Trộn ngẫu nhiên (Random)", "random")
-        for t in TRANSITION_PRESETS:
-            self.auto_trans_combo.addItem(t["label"], t["name"])
-        settings_grid.addWidget(self.auto_trans_combo, 8, 1)
-
-        settings_grid.addWidget(self._create_field_label("Thời lượng chuyển cảnh tự động (giây)"), 9, 0)
-        self.auto_trans_dur = QDoubleSpinBox()
-        self.auto_trans_dur.setRange(0.1, 5.0)
-        self.auto_trans_dur.setValue(0.4)
-        self.auto_trans_dur.setSingleStep(0.05)
-        settings_grid.addWidget(self.auto_trans_dur, 9, 1)
-
-        # Intro / Outro selection from Asset Library
-        settings_grid.addWidget(self._create_field_label("Video mở đầu (Intro)"), 10, 0)
-        self.intro_combo = QComboBox()
-        settings_grid.addWidget(self.intro_combo, 10, 1)
-
-        settings_grid.addWidget(self._create_field_label("Video kết thúc (Outro)"), 11, 0)
-        self.outro_combo = QComboBox()
-        settings_grid.addWidget(self.outro_combo, 11, 1)
-
-        left_side.addWidget(self.settings_frame)
-        self.settings_frame.setVisible(False)
-
-        # Action Buttons
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(10)
-
-        self.btn_add_queue = QPushButton(" THÊM VÀO HÀNG ĐỢI")
-        self.btn_add_queue.setIcon(get_svg_icon("plus", color="#000000", size=14))
-        self.btn_add_queue.setObjectName("btnAddQueue")
-        self.btn_add_queue.clicked.connect(self.add_to_queue_requested.emit)
-
-        self.btn_build_now = QPushButton(" DỰNG NGAY")
-        self.btn_build_now.setIcon(get_svg_icon("play", color="#000000", size=14))
-        self.btn_build_now.setObjectName("btnBuildNow")
-        self.btn_build_now.clicked.connect(self.build_now_requested.emit)
-
-        actions_layout.addWidget(self.btn_add_queue, 1)
-        actions_layout.addWidget(self.btn_build_now, 1)
-        left_side.addLayout(actions_layout)
-
-        # RIGHT COLUMN Layout
-        right_side = QVBoxLayout()
-        right_side.setSpacing(15)
-
-        # 3. ÂM THANH CARD
-        audio_card = QFrame()
-        audio_card.setObjectName("configCard")
-        audio_layout = QVBoxLayout(audio_card)
-        audio_layout.setContentsMargins(16, 16, 16, 16)
-        audio_layout.setSpacing(12)
-
-        audio_title = QLabel("Âm thanh")
-        audio_title.setObjectName("cardTitle")
-        audio_layout.addWidget(audio_title)
-
-        self.voice_path = QLineEdit()
-        self.voice_path.setPlaceholderText("Chọn tệp âm thanh giọng đọc chính (.mp3, .wav)...")
-        audio_layout.addWidget(self._create_field_label("Tệp giọng đọc chính (Voice Audio)"))
-        audio_layout.addLayout(self._create_path_row(self.voice_path, "audio"))
-
-        # Waveform Widget (Voice)
-        audio_layout.addWidget(self._create_field_label("Dạng sóng giọng đọc (Voice Waveform)"))
-        self.waveform_widget = AudioWaveformWidget()
-        audio_layout.addWidget(self.waveform_widget)
-
-        # Play/Pause controls
-        self.playback_controls = QHBoxLayout()
-        self.btn_play_voice = QPushButton(" Phát")
-        self.btn_play_voice.setIcon(get_svg_icon("play", color=COLOR_TEAL, size=14))
-        self.btn_play_voice.setEnabled(False)
-        self.btn_play_voice.clicked.connect(self._toggle_voice_playback)
-        self.playback_controls.addWidget(self.btn_play_voice)
-
-        self.lbl_playback_time = QLabel("00:00 / 00:00")
-        self.lbl_playback_time.setStyleSheet("color: #a1a1aa; font-size: 11px;")
-        self.playback_controls.addWidget(self.lbl_playback_time)
-        self.playback_controls.addStretch()
-        audio_layout.addLayout(self.playback_controls)
-
-        self.bgm_path = QLineEdit()
-        self.bgm_path.setPlaceholderText("Chọn nhạc nền lồng thêm (Không bắt buộc)...")
-        audio_layout.addWidget(self._create_field_label("Tệp nhạc nền (BGM Audio - Tùy chọn)"))
-        audio_layout.addLayout(self._create_path_row(self.bgm_path, "audio"))
-
-        # Waveform Widget (BGM)
-        audio_layout.addWidget(self._create_field_label("Dạng sóng nhạc nền (BGM Waveform)"))
-        self.bgm_waveform_widget = AudioWaveformWidget()
-        audio_layout.addWidget(self.bgm_waveform_widget)
-
-        self.voice_path.textChanged.connect(self._on_voice_path_changed)
-        self.bgm_path.textChanged.connect(self._on_bgm_path_changed)
-
-        right_side.addWidget(audio_card)
-
-        # 4. KIỂU CHỮ PHỤ ĐỀ CARD
+        # 4. KHUNG XEM TRƯỚC VÀ ĐỊNH DẠNG CHỮ CARD
         font_card = QFrame()
         font_card.setObjectName("configCard")
         font_layout = QVBoxLayout(font_card)
-        font_layout.setContentsMargins(16, 16, 16, 16)
-        font_layout.setSpacing(12)
+        font_layout.setContentsMargins(14, 14, 14, 14)
+        font_layout.setSpacing(10)
 
-        font_title = QLabel("Kiểu chữ phụ đề")
+        preview_header_row = QHBoxLayout()
+        font_title = QLabel("Xem trước & Kiểu chữ phụ đề")
         font_title.setObjectName("cardTitle")
-        font_layout.addWidget(font_title)
+        preview_header_row.addWidget(font_title)
 
-        # Premium Live Preview Container simulating Aspect Ratio Canvas
+        # Aspect ratio toggle
+        ratio_box = QHBoxLayout()
+        ratio_box.setSpacing(10)
+        self.ratio_9_16 = QRadioButton("Dọc (9:16)")
+        self.ratio_9_16.setChecked(True)
+        self.ratio_16_9 = QRadioButton("Ngang (16:9)")
+        ratio_box.addWidget(self.ratio_9_16)
+        ratio_box.addWidget(self.ratio_16_9)
+        preview_header_row.addStretch()
+        preview_header_row.addLayout(ratio_box)
+        font_layout.addLayout(preview_header_row)
+
+        # Live Preview Container simulating Canvas
         preview_container = QFrame()
         preview_container.setObjectName("previewContainer")
-        preview_container.setMinimumHeight(350)
-        preview_container.setStyleSheet("""
-            QFrame#previewContainer {
-                background-color: #09090b;
-                border: 1px solid #27272a;
+        preview_container.setMinimumHeight(300)
+        preview_container.setStyleSheet(f"""
+            QFrame#previewContainer {{
+                background-color: {DARK_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 8px;
-            }
+            }}
         """)
         preview_vbox = QVBoxLayout(preview_container)
-        preview_vbox.setContentsMargins(12, 12, 12, 12)
+        preview_vbox.setContentsMargins(10, 10, 10, 10)
         preview_vbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Black simulated video canvas
@@ -810,7 +693,6 @@ class SetupWidget(QWidget):
         self.preview_canvas.setObjectName("previewCanvas")
         self.preview_canvas.setStyleSheet("background-color: #000000; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;")
 
-        # Layout inside the canvas for subtitle positioning
         self.canvas_layout = QVBoxLayout(self.preview_canvas)
         self.canvas_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -821,15 +703,15 @@ class SetupWidget(QWidget):
 
         preview_vbox.addWidget(self.preview_canvas, 0, Qt.AlignmentFlag.AlignCenter)
 
-        preview_tag = QLabel("XEM TRƯỚC TRỰC TIẾP")
+        preview_tag = QLabel("XEM TRƯỚC TRỰC TIẾP (9:16 VERTICAL AUTO-WRAP)")
         preview_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_tag.setStyleSheet("color: #94a3b8; font-size: 8px; font-weight: bold; letter-spacing: 1.5px; margin-top: 8px;")
+        preview_tag.setStyleSheet("color: #94a3b8; font-size: 8px; font-weight: bold; letter-spacing: 1.5px; margin-top: 6px;")
         preview_vbox.addWidget(preview_tag, 0)
         font_layout.addWidget(preview_container)
 
         # Styling controls grid
         style_grid = QGridLayout()
-        style_grid.setSpacing(10)
+        style_grid.setSpacing(8)
 
         style_grid.addWidget(self._create_field_label("Phông chữ"), 0, 0)
         self.subtitle_font = QComboBox()
@@ -844,14 +726,14 @@ class SetupWidget(QWidget):
             pass
         style_grid.addWidget(self.subtitle_font, 0, 1)
 
-        style_grid.addWidget(self._create_field_label("Cỡ chữ"), 1, 0)
+        style_grid.addWidget(self._create_field_label("Cỡ chữ"), 0, 2)
         self.subtitle_font_size = QDoubleSpinBox()
         self.subtitle_font_size.setRange(1.0, 100.0)
         self.subtitle_font_size.setValue(6.0)
         self.subtitle_font_size.setSingleStep(0.5)
-        style_grid.addWidget(self.subtitle_font_size, 1, 1)
+        style_grid.addWidget(self.subtitle_font_size, 0, 3)
 
-        style_grid.addWidget(self._create_field_label("Màu sắc"), 2, 0)
+        style_grid.addWidget(self._create_field_label("Màu sắc"), 1, 0)
         color_row = QHBoxLayout()
         self.subtitle_color = QLineEdit("#FFFFFF")
         self.subtitle_color.setPlaceholderText("#FFFFFF")
@@ -864,37 +746,37 @@ class SetupWidget(QWidget):
         color_row.addWidget(self.subtitle_color, 1)
         color_row.addWidget(self.color_preview, 0)
         color_row.addWidget(self.btn_subtitle_color, 0)
-        style_grid.addLayout(color_row, 2, 1)
+        style_grid.addLayout(color_row, 1, 1)
 
-        style_grid.addWidget(self._create_field_label("Căn lề / Vị trí"), 3, 0)
+        style_grid.addWidget(self._create_field_label("Căn lề"), 1, 2)
         self.subtitle_align = QComboBox()
         self.subtitle_align.addItem("Giữa dưới (Bottom Center)", "bottom_center")
         self.subtitle_align.addItem("Chính giữa (Center)", "center")
         self.subtitle_align.addItem("Giữa trên (Top Center)", "top_center")
         self.subtitle_align.addItem("Trái dưới (Bottom Left)", "bottom_left")
         self.subtitle_align.addItem("Phải dưới (Bottom Right)", "bottom_right")
-        style_grid.addWidget(self.subtitle_align, 3, 1)
+        style_grid.addWidget(self.subtitle_align, 1, 3)
 
-        style_grid.addWidget(self._create_field_label("Độ rộng viền"), 4, 0)
+        style_grid.addWidget(self._create_field_label("Độ rộng viền"), 2, 0)
         self.subtitle_outline_width = QDoubleSpinBox()
         self.subtitle_outline_width.setRange(0.0, 100.0)
         self.subtitle_outline_width.setValue(40.0)
         self.subtitle_outline_width.setSingleStep(5.0)
-        style_grid.addWidget(self.subtitle_outline_width, 4, 1)
+        style_grid.addWidget(self.subtitle_outline_width, 2, 1)
 
-        style_grid.addWidget(self._create_field_label("Độ mờ bóng đổ"), 5, 0)
+        style_grid.addWidget(self._create_field_label("Bóng đổ (Alpha/Dist)"), 2, 2)
+        shadow_row = QHBoxLayout()
         self.subtitle_shadow_alpha = QDoubleSpinBox()
         self.subtitle_shadow_alpha.setRange(0.0, 1.0)
         self.subtitle_shadow_alpha.setValue(0.8)
         self.subtitle_shadow_alpha.setSingleStep(0.05)
-        style_grid.addWidget(self.subtitle_shadow_alpha, 5, 1)
-
-        style_grid.addWidget(self._create_field_label("Khoảng cách bóng"), 6, 0)
         self.subtitle_shadow_distance = QDoubleSpinBox()
         self.subtitle_shadow_distance.setRange(0.0, 50.0)
         self.subtitle_shadow_distance.setValue(5.0)
         self.subtitle_shadow_distance.setSingleStep(0.5)
-        style_grid.addWidget(self.subtitle_shadow_distance, 6, 1)
+        shadow_row.addWidget(self.subtitle_shadow_alpha, 1)
+        shadow_row.addWidget(self.subtitle_shadow_distance, 1)
+        style_grid.addLayout(shadow_row, 2, 3)
 
         font_layout.addLayout(style_grid)
 
@@ -938,19 +820,267 @@ class SetupWidget(QWidget):
         self.subtitle_outline_width.valueChanged.connect(self._update_subtitle_preview)
         self.subtitle_shadow.toggled.connect(self._update_subtitle_preview)
 
-        # Connections for aspect ratio / alignment changes to update preview canvas dimensions and positioning
         self.ratio_9_16.toggled.connect(self._update_preview_canvas_size)
         self.ratio_16_9.toggled.connect(self._update_preview_canvas_size)
         self.subtitle_align.currentIndexChanged.connect(self._update_preview_canvas_size)
 
-        right_side.addWidget(font_card)
+        center_layout.addWidget(font_card)
 
-        # Assemble the double columns layout
-        container_layout.addLayout(left_side, 1)
-        container_layout.addLayout(right_side, 1)
+        # 5. CẤU TRÚC TIMELINE CARD
+        timeline_card = QFrame()
+        timeline_card.setObjectName("configCard")
+        timeline_layout = QVBoxLayout(timeline_card)
+        timeline_layout.setContentsMargins(14, 14, 14, 14)
+        timeline_layout.setSpacing(8)
 
-        scroll.setWidget(container)
-        layout.addWidget(scroll)
+        timeline_title = QLabel("Cấu trúc Timeline (Intro 15% / Media 70% / Outro 15%)")
+        timeline_title.setObjectName("cardTitle")
+        timeline_layout.addWidget(timeline_title)
+
+        from app.widgets.dashboard_widget import TimelineWidget
+        self.timeline_widget = TimelineWidget()
+        timeline_layout.addWidget(self.timeline_widget)
+
+        center_layout.addWidget(timeline_card)
+
+        # ==================== COLUMN 3: KEYFRAME PRESETS & BUILD (25%) ====================
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(8, 4, 4, 4)
+        right_layout.setSpacing(14)
+
+        # 6. THÔNG TIN DỰ ÁN CARD
+        project_card = QFrame()
+        project_card.setObjectName("configCard")
+        project_layout = QVBoxLayout(project_card)
+        project_layout.setContentsMargins(14, 14, 14, 14)
+        project_layout.setSpacing(10)
+
+        proj_title = QLabel("Thông tin dự án")
+        proj_title.setObjectName("cardTitle")
+        project_layout.addWidget(proj_title)
+
+        self.project_name = QLineEdit("Du_An_CapCut")
+        self.project_name.setPlaceholderText("Tên dự án nháp CapCut (không viết dấu)...")
+        project_layout.addWidget(self._create_field_label("Tên dự án nháp"))
+        project_layout.addWidget(self.project_name)
+
+        self.draft_root = DropLineEdit("Thư mục lưu dự án nháp của CapCut...")
+        project_layout.addWidget(self._create_field_label("Thư mục dự án nháp CapCut (Draft Root)"))
+        project_layout.addLayout(self._create_path_row(self.draft_root, "folder"))
+
+        self.btn_capcut_launch = QPushButton(" Mở CapCut PC")
+        self.btn_capcut_launch.setIcon(get_svg_icon("capcut", color="#ffffff", size=16))
+        self.btn_capcut_launch.setToolTip("Tự động tìm và mở ứng dụng CapCut PC trên Windows")
+        self.btn_capcut_launch.setStyleSheet(f"background-color: {COLOR_SIDEBAR_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 6px; padding: 6px 12px; font-weight: 600; color: #ffffff;")
+        self.btn_capcut_launch.clicked.connect(self._launch_capcut_quick)
+        project_layout.addWidget(self.btn_capcut_launch)
+
+        right_layout.addWidget(project_card)
+
+        # 7. PRESET KEYFRAME & CHUYỂN CẢNH CARD
+        kf_card = QFrame()
+        kf_card.setObjectName("configCard")
+        kf_layout = QVBoxLayout(kf_card)
+        kf_layout.setContentsMargins(14, 14, 14, 14)
+        kf_layout.setSpacing(10)
+
+        kf_title = QLabel("Keyframe & Hiệu ứng")
+        kf_title.setObjectName("cardTitle")
+        kf_layout.addWidget(kf_title)
+
+        kf_layout.addWidget(self._create_field_label("Tự động thêm Keyframe (Auto Keyframe)"))
+        self.auto_kf_combo = QComboBox()
+        self.auto_kf_combo.addItem("Không áp dụng (None)", "none")
+        self.auto_kf_combo.addItem("Trộn ngẫu nhiên (Random)", "random")
+        for p in KEYFRAME_PRESETS:
+            self.auto_kf_combo.addItem(p["name"], p["id"])
+        kf_layout.addWidget(self.auto_kf_combo)
+
+        # Keyframe offset note (0.3s)
+        kf_offset_note = QLabel("● Keyframe Padding Offset: Bù 0.3s điểm đầu/cuối tránh rung giật")
+        kf_offset_note.setStyleSheet("color: #a1a1aa; font-size: 10px; font-weight: 500;")
+        kf_layout.addWidget(kf_offset_note)
+
+        kf_layout.addWidget(self._create_field_label("Tự động thêm Chuyển cảnh (Auto Transition)"))
+        self.auto_trans_combo = QComboBox()
+        self.auto_trans_combo.addItem("Không áp dụng (None)", "none")
+        self.auto_trans_combo.addItem("Trộn ngẫu nhiên (Random)", "random")
+        for t in TRANSITION_PRESETS:
+            self.auto_trans_combo.addItem(t["label"], t["name"])
+        kf_layout.addWidget(self.auto_trans_combo)
+
+        trans_dur_row = QHBoxLayout()
+        trans_dur_row.addWidget(self._create_field_label("Thời lượng chuyển cảnh (giây)"))
+        self.auto_trans_dur = QDoubleSpinBox()
+        self.auto_trans_dur.setRange(0.1, 5.0)
+        self.auto_trans_dur.setValue(0.4)
+        self.auto_trans_dur.setSingleStep(0.05)
+        trans_dur_row.addWidget(self.auto_trans_dur)
+        kf_layout.addLayout(trans_dur_row)
+
+        intro_outro_grid = QGridLayout()
+        intro_outro_grid.setSpacing(8)
+        intro_outro_grid.addWidget(self._create_field_label("Video mở đầu (Intro)"), 0, 0)
+        self.intro_combo = QComboBox()
+        self.intro_combo.currentIndexChanged.connect(self._update_timeline_structure)
+        intro_outro_grid.addWidget(self.intro_combo, 0, 1)
+
+        intro_outro_grid.addWidget(self._create_field_label("Video kết thúc (Outro)"), 1, 0)
+        self.outro_combo = QComboBox()
+        self.outro_combo.currentIndexChanged.connect(self._update_timeline_structure)
+        intro_outro_grid.addWidget(self.outro_combo, 1, 1)
+        kf_layout.addLayout(intro_outro_grid)
+
+        # Collapsible advanced settings
+        self.settings_toggle = QPushButton(" Cài đặt nâng cao & Giao diện")
+        self.settings_toggle.setIcon(get_svg_icon("settings", color=COLOR_TEAL, size=14))
+        self.settings_toggle.setObjectName("settingsToggle")
+        self.settings_toggle.setCheckable(True)
+        self.settings_toggle.setChecked(False)
+        self.settings_toggle.clicked.connect(self._toggle_advanced_settings)
+        kf_layout.addWidget(self.settings_toggle)
+
+        self.settings_frame = QFrame()
+        self.settings_frame.setObjectName("settingsFrame")
+        settings_grid = QGridLayout(self.settings_frame)
+        settings_grid.setContentsMargins(8, 8, 8, 8)
+        settings_grid.setSpacing(10)
+
+        # Slicing timers
+        settings_grid.addWidget(self._create_field_label("Clip nền tối thiểu (s)"), 0, 0)
+        self.clip_min = QDoubleSpinBox()
+        self.clip_min.setRange(0.5, 86400.0)
+        self.clip_min.setValue(5.0)
+        self.clip_min.setSingleStep(0.5)
+        settings_grid.addWidget(self.clip_min, 0, 1)
+
+        settings_grid.addWidget(self._create_field_label("Clip nền tối đa (s)"), 1, 0)
+        self.clip_max = QDoubleSpinBox()
+        self.clip_max.setRange(0.5, 86400.0)
+        self.clip_max.setValue(9.0)
+        self.clip_max.setSingleStep(0.5)
+        settings_grid.addWidget(self.clip_max, 1, 1)
+
+        # Selection Mode
+        settings_grid.addWidget(self._create_field_label("Cách trộn video nền"), 2, 0)
+        self.selection_mode = QComboBox()
+        self.selection_mode.addItems([
+            "Trộn ngẫu nhiên (shuffle_bag)",
+            "Lần lượt (sequential)",
+            "Ngẫu nhiên (random)",
+            "Nhân bản rồi trộn toàn bộ (duplicate_then_shuffle)",
+            "Nhân bản rồi trộn phần nhân bản (shuffle_duplicates_only)"
+        ])
+        settings_grid.addWidget(self.selection_mode, 2, 1)
+
+        # Short video handling mode
+        settings_grid.addWidget(self._create_field_label("Xử lý video ngắn"), 3, 0)
+        self.short_video_mode = QComboBox()
+        self.short_video_mode.addItems([
+            "Kéo giãn / Đổi tốc độ (stretch)",
+            "Tự động lặp lại (loop)"
+        ])
+        settings_grid.addWidget(self.short_video_mode, 3, 1)
+
+        # Background Switch Mode
+        settings_grid.addWidget(self._create_field_label("Quy tắc chuyển cảnh"), 4, 0)
+        self.bg_switch_mode = QComboBox()
+        self.bg_switch_mode.addItem("Theo thời gian cố định / ngẫu nhiên", "time")
+        self.bg_switch_mode.addItem("Theo từng câu phụ đề SRT", "subtitle")
+        self.bg_switch_mode.addItem("Theo cụm câu phụ đề (Gom nhóm)", "subtitle_group")
+        settings_grid.addWidget(self.bg_switch_mode, 4, 1)
+
+        # Group size (Subtitle group)
+        self.bg_switch_group_label = self._create_field_label("Số câu thoại mỗi cảnh")
+        settings_grid.addWidget(self.bg_switch_group_label, 5, 0)
+        self.bg_switch_group_size = QSpinBox()
+        self.bg_switch_group_size.setRange(1, 50)
+        self.bg_switch_group_size.setValue(3)
+        settings_grid.addWidget(self.bg_switch_group_size, 5, 1)
+
+        self.bg_switch_mode.currentIndexChanged.connect(self._on_bg_switch_mode_changed)
+
+        self.recursive_scan = QCheckBox("Quét cả thư mục con (Recursive)")
+        self.recursive_scan.setChecked(False)
+        settings_grid.addWidget(self.recursive_scan, 6, 0, 1, 2)
+
+        kf_layout.addWidget(self.settings_frame)
+        self.settings_frame.setVisible(False)
+        right_layout.addWidget(kf_card)
+
+        # 8. HÀNH ĐỘNG DỰNG (Action Buttons Card)
+        actions_card = QFrame()
+        actions_card.setObjectName("configCard")
+        actions_layout = QVBoxLayout(actions_card)
+        actions_layout.setContentsMargins(14, 14, 14, 14)
+        actions_layout.setSpacing(10)
+
+        actions_title = QLabel("Xuất bản & Điều khiển")
+        actions_title.setObjectName("cardTitle")
+        actions_layout.addWidget(actions_title)
+
+        self.btn_build_now = QPushButton(" DỰNG NGAY")
+        self.btn_build_now.setIcon(get_svg_icon("play", color="#000000", size=14))
+        self.btn_build_now.setObjectName("btnBuildNow")
+        self.btn_build_now.clicked.connect(self.build_now_requested.emit)
+        actions_layout.addWidget(self.btn_build_now)
+
+        self.btn_add_queue = QPushButton(" THÊM VÀO HÀNG ĐỢI")
+        self.btn_add_queue.setIcon(get_svg_icon("plus", color="#000000", size=14))
+        self.btn_add_queue.setObjectName("btnAddQueue")
+        self.btn_add_queue.clicked.connect(self.add_to_queue_requested.emit)
+        actions_layout.addWidget(self.btn_add_queue)
+
+        self.btn_quick_capcut = QPushButton("  Mở CapCut PC")
+        self.btn_quick_capcut.setIcon(get_svg_icon("capcut", color="#ffffff", size=16))
+        self.btn_quick_capcut.setStyleSheet("""
+            QPushButton {
+                background-color: #27272a;
+                border: 1px solid #3f3f46;
+                color: #ffffff;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #3f3f46;
+                border-color: #00F2FE;
+            }
+        """)
+        self.btn_quick_capcut.clicked.connect(self._launch_capcut_quick)
+        actions_layout.addWidget(self.btn_quick_capcut)
+
+        right_layout.addWidget(actions_card)
+        right_layout.addStretch()
+
+        # Wrap columns in QScrollAreas for responsiveness
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setWidget(left_widget)
+
+        center_scroll = QScrollArea()
+        center_scroll.setWidgetResizable(True)
+        center_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        center_scroll.setWidget(center_widget)
+
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setWidget(right_widget)
+
+        self.studio_splitter.addWidget(left_scroll)
+        self.studio_splitter.addWidget(center_scroll)
+        self.studio_splitter.addWidget(right_scroll)
+
+        self.studio_splitter.setSizes([320, 640, 320])
+        self.studio_splitter.setStretchFactor(0, 1)
+        self.studio_splitter.setStretchFactor(1, 2)
+        self.studio_splitter.setStretchFactor(2, 1)
+
+        layout.addWidget(self.studio_splitter, 1)
 
         # Initializations
         self._on_bg_switch_mode_changed()
@@ -1086,6 +1216,57 @@ class SetupWidget(QWidget):
             self.canvas_layout.addLayout(row)
             self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
+    @Slot()
+    def _on_sub_table_selection_changed(self) -> None:
+        selected_rows = self.sub_table.selectedItems()
+        if selected_rows:
+            row = selected_rows[0].row()
+            text_item = self.sub_table.item(row, 3)
+            if text_item and text_item.text():
+                raw_text = text_item.text().strip()
+                words = raw_text.split()
+                if len(words) > 8 and "\n" not in raw_text:
+                    mid = len(words) // 2
+                    wrapped = " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
+                else:
+                    wrapped = raw_text
+                self.preview_label.setText(wrapped)
+                self.preview_label.update()
+
+    @Slot()
+    def _launch_capcut_quick(self) -> None:
+        from draft_doctor import find_capcut_executable
+        capcut_exe = find_capcut_executable()
+        if capcut_exe and capcut_exe.exists():
+            try:
+                subprocess.Popen([str(capcut_exe)])
+            except Exception as e:
+                QMessageBox.warning(self, "Lỗi", f"Không thể khởi chạy CapCut: {e}")
+        else:
+            QMessageBox.warning(self, "Cảnh báo", "Không tìm thấy CapCut.exe trên Windows!\nVui lòng kiểm tra lại cài đặt CapCut PC.")
+
+    @Slot()
+    def _update_timeline_structure(self) -> None:
+        if not hasattr(self, "timeline_widget") or self.timeline_widget is None:
+            return
+        intro_val = self.intro_combo.currentText() if hasattr(self, "intro_combo") else ""
+        has_intro = bool(intro_val and intro_val != "Không sử dụng")
+        outro_val = self.outro_combo.currentText() if hasattr(self, "outro_combo") else ""
+        has_outro = bool(outro_val and outro_val != "Không sử dụng")
+        media_count = 0
+        media_path = self.media_dir.text().strip() if hasattr(self, "media_dir") else ""
+        if media_path and Path(media_path).is_dir():
+            try:
+                media_count = len([p for p in Path(media_path).iterdir() if p.suffix.lower() in {'.mp4', '.mov', '.jpg', '.png', '.jpeg', '.mkv'}])
+            except Exception:
+                media_count = 0
+        dur_str = getattr(self.waveform_widget, "duration_str", "00:00")
+        self.timeline_widget.set_data(has_intro, has_outro, media_count, dur_str)
+
+    @Slot(str)
+    def _on_media_dir_changed_sync(self, text: str) -> None:
+        self._update_timeline_structure()
+
     @Slot(str)
     def _on_srt_path_changed(self, path_str: str) -> None:
         try:
@@ -1144,11 +1325,12 @@ class SetupWidget(QWidget):
 
             if is_short or is_overlap:
                 if is_short and is_overlap:
-                    item_status.setText("⚠️ Quá ngắn & Trùng lặp")
+                    item_status.setText("Quá ngắn & Trùng lặp")
                 elif is_short:
-                    item_status.setText("⚠️ Quá ngắn (<0.8s)")
+                    item_status.setText("Quá ngắn (<0.8s)")
                 else:
-                    item_status.setText("⚠️ Trùng lặp thời gian")
+                    item_status.setText("Trùng lặp thời gian")
+                item_status.setIcon(get_svg_icon("alert", color=COLOR_ERROR, size=14))
                 item_status.setForeground(QCOLOR_ERROR)  # Red
 
                 # Apply visual warning background highlight
@@ -1156,7 +1338,8 @@ class SetupWidget(QWidget):
                 for item in [item_idx, item_time, item_dur, item_text, item_status]:
                     item.setBackground(warning_bg) # Light warning tint
             else:
-                item_status.setText("✅ Hợp lệ")
+                item_status.setText("Hợp lệ")
+                item_status.setIcon(get_svg_icon("check", color=COLOR_SUCCESS, size=14))
                 item_status.setForeground(QCOLOR_SUCCESS)  # Green
 
             self.sub_table.setItem(idx, 0, item_idx)
@@ -1412,17 +1595,19 @@ class SetupWidget(QWidget):
                 if is_short or is_overlap:
                     bg_color = QColor(QCOLOR_ERROR.red(), QCOLOR_ERROR.green(), QCOLOR_ERROR.blue(), 20)
                     if is_short and is_overlap:
-                        status_text = "⚠️ Quá ngắn & Trùng lặp"
+                        status_text = "Quá ngắn & Trùng lặp"
                     elif is_short:
-                        status_text = "⚠️ Quá ngắn (<0.8s)"
+                        status_text = "Quá ngắn (<0.8s)"
                     else:
-                        status_text = "⚠️ Trùng lặp thời gian"
+                        status_text = "Trùng lặp thời gian"
                     status_item.setText(status_text)
+                    status_item.setIcon(get_svg_icon("alert", color=COLOR_ERROR, size=14))
                     status_item.setForeground(QCOLOR_ERROR)
                 else:
                     bg_color = QColor(Qt.GlobalColor.transparent)
-                    status_text = "✅ Hợp lệ"
+                    status_text = "Hợp lệ"
                     status_item.setText(status_text)
+                    status_item.setIcon(get_svg_icon("check", color=COLOR_SUCCESS, size=14))
                     status_item.setForeground(QCOLOR_SUCCESS)
 
                 for c in range(self.sub_table.columnCount()):
@@ -1515,10 +1700,10 @@ class SetupWidget(QWidget):
                 msg_parts.append(f"{num_overlap} dòng trùng lặp")
             if num_short > 0:
                 msg_parts.append(f"{num_short} dòng quá ngắn")
-            self.lbl_srt_diag.setText(f"⚠️ Phát hiện: {', '.join(msg_parts)}.")
+            self.lbl_srt_diag.setText(f"Phát hiện: {', '.join(msg_parts)}.")
             self.lbl_srt_diag.setStyleSheet(f"color: {COLOR_ERROR}; font-size: 12px; font-weight: 500;")
         else:
-            self.lbl_srt_diag.setText("✅ Tất cả phụ đề đều hợp lệ.")
+            self.lbl_srt_diag.setText("Tất cả phụ đề đều hợp lệ.")
             self.lbl_srt_diag.setStyleSheet(f"color: {COLOR_SUCCESS}; font-size: 12px; font-weight: 500;")
 
     @Slot()
@@ -1549,17 +1734,17 @@ class SetupWidget(QWidget):
             QMessageBox.information(
                 self,
                 "Kiểm tra thời gian",
-                "✅ Tuyệt vời! Không phát hiện lỗi trùng lặp thời gian hoặc dòng quá ngắn."
+                "Tuyệt vời! Không phát hiện lỗi trùng lặp thời gian hoặc dòng quá ngắn."
             )
             return
 
         report = []
         if overlap_details:
-            report.append("❌ CẢNH BÁO TRÙNG LẶP THỜI GIAN (OVERLAPS):")
+            report.append("[CẢNH BÁO TRÙNG LẶP THỜI GIAN]:")
             report.extend(overlap_details)
             report.append("")
         if short_details:
-            report.append("⚠️ CẢNH BÁO DÒNG QUÁ NGẮN (<0.8s):")
+            report.append("[CẢNH BÁO DÒNG QUÁ NGẮN (<0.8s)]:")
             report.extend(short_details)
 
         QMessageBox.warning(

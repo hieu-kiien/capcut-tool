@@ -73,6 +73,16 @@ class ScriptMaterial:
         self.mix_modes = []
         self.canvases = []
 
+        self._video_ids: set = set()
+        self._audio_ids: set = set()
+        self._fade_ids: set = set()
+        self._effect_ids: set = set()
+        self._animation_ids: set = set()
+        self._video_effect_ids: set = set()
+        self._transition_ids: set = set()
+        self._filter_ids: set = set()
+        self._mix_mode_ids: set = set()
+
     @overload
     def __contains__(self, item: Union[VideoMaterial, AudioMaterial]) -> bool: ...
     @overload
@@ -82,23 +92,41 @@ class ScriptMaterial:
 
     def __contains__(self, item) -> bool:
         if isinstance(item, VideoMaterial):
-            return item.material_id in [video.material_id for video in self.videos]
+            if len(self._video_ids) != len(self.videos):
+                self._video_ids = {video.material_id for video in self.videos}
+            return item.material_id in self._video_ids
         elif isinstance(item, AudioMaterial):
-            return item.material_id in [audio.material_id for audio in self.audios]
+            if len(self._audio_ids) != len(self.audios):
+                self._audio_ids = {audio.material_id for audio in self.audios}
+            return item.material_id in self._audio_ids
         elif isinstance(item, AudioFade):
-            return item.fade_id in [fade.fade_id for fade in self.audio_fades]
+            if len(self._fade_ids) != len(self.audio_fades):
+                self._fade_ids = {fade.fade_id for fade in self.audio_fades}
+            return item.fade_id in self._fade_ids
         elif isinstance(item, AudioEffect):
-            return item.effect_id in [effect.effect_id for effect in self.audio_effects]
+            if len(self._effect_ids) != len(self.audio_effects):
+                self._effect_ids = {effect.effect_id for effect in self.audio_effects}
+            return item.effect_id in self._effect_ids
         elif isinstance(item, SegmentAnimations):
-            return item.animation_id in [ani.animation_id for ani in self.animations]
+            if len(self._animation_ids) != len(self.animations):
+                self._animation_ids = {ani.animation_id for ani in self.animations}
+            return item.animation_id in self._animation_ids
         elif isinstance(item, VideoEffect):
-            return item.global_id in [effect.global_id for effect in self.video_effects]
+            if len(self._video_effect_ids) != len(self.video_effects):
+                self._video_effect_ids = {effect.global_id for effect in self.video_effects}
+            return item.global_id in self._video_effect_ids
         elif isinstance(item, Transition):
-            return item.global_id in [transition.global_id for transition in self.transitions]
+            if len(self._transition_ids) != len(self.transitions):
+                self._transition_ids = {transition.global_id for transition in self.transitions}
+            return item.global_id in self._transition_ids
         elif isinstance(item, Filter):
-            return item.global_id in [filter_.global_id for filter_ in self.filters]
+            if len(self._filter_ids) != len(self.filters):
+                self._filter_ids = {filter_.global_id for filter_ in self.filters}
+            return item.global_id in self._filter_ids
         elif isinstance(item, MixMode):
-            return item.global_id in [mix_mode.global_id for mix_mode in self.mix_modes]
+            if len(self._mix_mode_ids) != len(self.mix_modes):
+                self._mix_mode_ids = {mix_mode.global_id for mix_mode in self.mix_modes}
+            return item.global_id in self._mix_mode_ids
         else:
             raise TypeError("Invalid argument type '%s'" % type(item))
 
@@ -829,7 +857,11 @@ class ScriptFile:
         self.content["tracks"] = [track.export_json() for track in track_list]
 
         if compact:
-            return json.dumps(self.content, ensure_ascii=False, separators=(',', ':'))
+            try:
+                import orjson
+                return orjson.dumps(self.content).decode('utf-8')
+            except ImportError:
+                return json.dumps(self.content, ensure_ascii=False, separators=(',', ':'))
         else:
             return json.dumps(self.content, ensure_ascii=False, indent=4)
 
@@ -847,17 +879,21 @@ class ScriptFile:
         if self.save_path is None:
             raise ValueError("没有设置保存路径, 可能不在模板模式下")
         
-        # 保存到主要文件
-        self.dump(self.save_path, compact=compact)
+        # 导出一次，避免双文件模式下重复全量序列化
+        content_str = self.dumps(compact=compact)
+        with open(self.save_path, "w", encoding="utf-8") as f:
+            f.write(content_str)
         
         # 如果启用了双文件兼容模式，同时保存到另一个文件
         if self.dual_file_compatibility:
             draft_dir = os.path.dirname(self.save_path)
+            alt_path = None
             if "draft_content.json" in self.save_path and "draft_info.json" not in self.save_path:
                 # 当前保存的是 draft_content.json，同时保存到 draft_info.json
                 alt_path = os.path.join(draft_dir, "draft_info.json")
-                self.dump(alt_path, compact=compact)
             elif "draft_info.json" in self.save_path and "draft_content.json" not in self.save_path:
                 # 当前保存的是 draft_info.json，同时保存到 draft_content.json
                 alt_path = os.path.join(draft_dir, "draft_content.json")
-                self.dump(alt_path, compact=compact)
+            if alt_path:
+                with open(alt_path, "w", encoding="utf-8") as f:
+                    f.write(content_str)

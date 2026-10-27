@@ -58,9 +58,10 @@ def remove_solid_bg_from_video(
     similarity: float,
     blend: float,
     cancel_check: Any = None,
+    timeout_sec: float = 60.0,
 ) -> Path:
     from runtime_tools import resolve_ffmpeg
-    from app.job_control import JobCancelled
+    from core.job_control import JobCancelled
     import time
 
     _, ffmpeg_color, label = _OVERLAY_BG_COLORS.get(mode, ((0, 255, 0), "0x00FF00", "xanh lá"))
@@ -95,6 +96,7 @@ def remove_solid_bg_from_video(
         creationflags=creationflags,
     )
     
+    started_at = time.time()
     try:
         while process.poll() is None:
             if cancel_check and cancel_check():
@@ -104,6 +106,13 @@ def remove_solid_bg_from_video(
                 except subprocess.TimeoutExpired:
                     process.kill()
                 raise JobCancelled("Quy trình xóa nền video đã bị hủy bởi người dùng.")
+            if timeout_sec > 0 and (time.time() - started_at) > timeout_sec:
+                process.terminate()
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                raise TimeoutError(f"Quá thời gian xử lý video bằng FFmpeg ({timeout_sec}s).")
             time.sleep(0.1)
         
         stdout, stderr = process.communicate()
@@ -134,6 +143,7 @@ def prepare_overlay_asset(
     similarity: float = 0.18,
     blend: float = 0.08,
     cancel_check: Any = None,
+    timeout_sec: float = 60.0,
 ) -> Path:
     source_path = Path(source)
     mode = (bg_mode or "none").strip().lower()
@@ -147,5 +157,5 @@ def prepare_overlay_asset(
     if ext in _IMAGE_OVERLAY_EXTENSIONS:
         return remove_solid_bg_from_image(source_path, output_dir, prefix, mode, similarity, blend)
     if ext in _VIDEO_OVERLAY_EXTENSIONS:
-        return remove_solid_bg_from_video(source_path, output_dir, prefix, mode, similarity, blend, cancel_check=cancel_check)
+        return remove_solid_bg_from_video(source_path, output_dir, prefix, mode, similarity, blend, cancel_check=cancel_check, timeout_sec=timeout_sec)
     raise RuntimeError(f"Không hỗ trợ xóa nền cho định dạng overlay: {ext or '(không rõ)'}")

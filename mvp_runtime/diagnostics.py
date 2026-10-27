@@ -79,10 +79,21 @@ def _writable_check(path: Path) -> Check:
 
 def collect_diagnostics(project_root: Optional[Path] = None) -> DiagnosticReport:
     root = (project_root or Path(__file__).resolve().parents[1]).resolve()
-    checks: List[Check] = [
-        _path_check(root / "app" / "gui.py", "source:app/gui.py"),
-        _path_check(root / "app" / "pipeline.py", "source:app/pipeline.py"),
-        _path_check(root / "capcut_draft_creator.py", "source:capcut_draft_creator.py"),
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        source_checks = [
+            _module_check("app.gui"),
+            _module_check("app.pipeline"),
+            _module_check("capcut_draft_creator"),
+        ]
+    else:
+        source_checks = [
+            _path_check(root / "app" / "gui.py", "source:app/gui.py"),
+            _path_check(root / "app" / "pipeline.py", "source:app/pipeline.py"),
+            _path_check(root / "capcut_draft_creator.py", "source:capcut_draft_creator.py"),
+        ]
+
+    checks: List[Check] = source_checks + [
         _module_check("PySide6"),
         _module_check("psutil", required=False),
         _module_check("pymediainfo", required=False),

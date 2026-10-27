@@ -56,6 +56,9 @@ a = Analysis(
     optimize=1,
 )
 pyz = PYZ(a.pure)
+version_file = str(ROOT / "packaging" / "file_version_info.txt") if (ROOT / "packaging" / "file_version_info.txt").exists() else None
+icon_file = str(ROOT / "assets" / "icon.ico") if (ROOT / "assets" / "icon.ico").exists() else None
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -65,20 +68,22 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # Disabled UPX to prevent antivirus false-positive heuristic flags
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version=version_file,
+    icon=icon_file,
 )
 coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,  # Disabled UPX for clean uncompressed binaries
     upx_exclude=[],
     name="CapCutLongStoryStudio",
 )

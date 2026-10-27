@@ -43,7 +43,12 @@ from app.presets import KEYFRAME_PRESETS, TRANSITION_PRESETS
 from core.path_validation import validate_project_name
 from app.widgets import DashboardWidget, SetupWidget, EffectsWidget, BuildWidget, HistoryWidget, MediaStudioWidget
 from profiles.manager import ProfileManager
-from app.controllers.profile_controller import ProfileController
+from app.controllers import (
+    ProfileController,
+    SettingsController,
+    DoctorController,
+    EffectsController,
+)
 from PySide6.QtWidgets import QMenu
 from PySide6.QtGui import QAction
 from datetime import datetime
@@ -60,27 +65,7 @@ from app.utils import hex_to_rgb_tuple, rgb_tuple_to_hex
 from app.queue_manager import BatchQueueManager
 from app.theme import get_application_stylesheet
 
-# Mapping preset_id -> (group_type, default_values)
-_PRESET_GROUP_MAP: Dict[str, tuple] = {
-    "zoom_in_slow":      ("zoom",     {"zoom_from": 100.0, "zoom_to": 112.0}),
-    "zoom_out_slow":     ("zoom",     {"zoom_from": 112.0, "zoom_to": 100.0}),
-    "zoom_in_fast":      ("zoom",     {"zoom_from": 100.0, "zoom_to": 125.0}),
-    "zoom_out_fast":     ("zoom",     {"zoom_from": 125.0, "zoom_to": 100.0}),
-    "zoom_bounce":       ("bounce",   {"zoom_from": 100.0, "zoom_peak": 118.0, "zoom_peak_at": 60.0, "zoom_end": 108.0}),
-    "pan_left_right":    ("pan",      {"pan_zoom": 115.0, "pan_from": -0.07, "pan_to":  0.07, "pan_axis": "pos_x", "axis_lbl": "X (Ngang)"}),
-    "pan_right_left":    ("pan",      {"pan_zoom": 115.0, "pan_from":  0.07, "pan_to": -0.07, "pan_axis": "pos_x", "axis_lbl": "X (Ngang)"}),
-    "pan_up_down":       ("pan",      {"pan_zoom": 115.0, "pan_from": -0.07, "pan_to":  0.07, "pan_axis": "pos_y", "axis_lbl": "Y (Dọc)"}),
-    "pan_down_up":       ("pan",      {"pan_zoom": 115.0, "pan_from":  0.07, "pan_to": -0.07, "pan_axis": "pos_y", "axis_lbl": "Y (Dọc)"}),
-    "zoom_in_pan_left":  ("zoompan",  {"zoom_from": 100.0, "zoom_to": 115.0, "pan_from":  0.0,  "pan_to": -0.06, "pan_axis": "pos_x", "axis_lbl": "X (Ngang)"}),
-    "zoom_in_pan_right": ("zoompan",  {"zoom_from": 100.0, "zoom_to": 115.0, "pan_from":  0.0,  "pan_to":  0.06, "pan_axis": "pos_x", "axis_lbl": "X (Ngang)"}),
-    "zoom_in_pan_up":    ("zoompan",  {"zoom_from": 100.0, "zoom_to": 115.0, "pan_from":  0.0,  "pan_to": -0.06, "pan_axis": "pos_y", "axis_lbl": "Y (Dọc)"}),
-    "zoom_out_pan_down": ("zoompan",  {"zoom_from": 115.0, "zoom_to": 100.0, "pan_from": -0.06, "pan_to":  0.0,  "pan_axis": "pos_y", "axis_lbl": "Y (Dọc)"}),
-    "subtle_rotate_cw":  ("rotate",   {"rot_zoom": 105.0, "rot_from": -1.5, "rot_to":  1.5}),
-    "subtle_rotate_ccw": ("rotate",   {"rot_zoom": 105.0, "rot_from":  1.5, "rot_to": -1.5}),
-    "fade_in":           ("fade",     {"fade_from": 0.0, "fade_to": 1.0}),
-    "fade_out":          ("fade",     {"fade_from": 1.0, "fade_to": 0.0}),
-    "fade_in_out":       ("fadeinout",{"fio_in_end": 15.0, "fio_out_start": 85.0}),
-}
+from app.controllers.effects_controller import _PRESET_GROUP_MAP
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.json"
@@ -131,7 +116,9 @@ class MainWindow(QMainWindow):
 
         root_dir = Path(__file__).resolve().parents[1]
         cc_logger.setup_file_logging(root_dir / ".capcut_tool_jobs")
-        cc_logger.logger.info("CapCut Draft Studio v1.0.0 khởi động thành công.")
+        self.settings_controller = SettingsController(self)
+        self.doctor_controller = DoctorController(self)
+        self.effects_controller = EffectsController(self)
 
         self._load_config()
 
@@ -143,7 +130,7 @@ class MainWindow(QMainWindow):
             if deleted > 0:
                 self._append_log(f"[HỆ THỐNG] Dọn dẹp tự động lúc khởi động: Đã xóa {deleted} tệp sao lưu cũ hơn {keep_days} ngày.")
         except Exception as e:
-            print(f"Error doing startup backups cleanup: {e}")
+            cc_logger.logger.warning(f"Error doing startup backups cleanup: {e}")
         self.profile_controller = ProfileController(self)
         self.profile_controller._refresh_profiles_list(self._current_profile_name)
 
@@ -1009,7 +996,7 @@ class MainWindow(QMainWindow):
         # Trigger non-blocking floating Toast for key status events
         if "[THÀNH CÔNG]" in text:
             clean = text.replace("[THÀNH CÔNG]", "").strip()
-            self.show_toast("Thành công ✨", clean, level="success")
+            self.show_toast("Thành công", clean, level="success")
         elif "[LỖI]" in text:
             clean = text.replace("[LỖI]", "").strip()
             self.show_toast("Lỗi hệ thống", clean, level="error")
@@ -1023,727 +1010,58 @@ class MainWindow(QMainWindow):
         if root_str and Path(root_str).exists():
             try:
                 os.startfile(root_str)
-                self.show_toast("Thành công ✨", f"Đã mở thư mục draft CapCut:\n{root_str}", level="info")
+                self.show_toast("Thành công", f"Đã mở thư mục draft CapCut:\n{root_str}", level="info")
             except Exception as e:
                 self.show_toast("Lỗi hệ thống", f"Không thể mở thư mục: {e}", level="error")
 
     def _refresh_projects(self) -> None:
-        self.effects_widget.project_combo.clear()
-        self.history_widget.project_combo.clear()
-        root_str = self.setup_widget.draft_root.text().strip()
-        if not root_str:
-            return
-
-        root_path = Path(root_str)
-        if not root_path.exists() or not root_path.is_dir():
-            return
-
-        try:
-            projects = []
-            for p in root_path.iterdir():
-                if p.is_dir() and not p.name.startswith('.'):
-                    if (p / 'draft_content.json').exists() or (p / 'Timelines').exists():
-                        projects.append(p.name)
-
-            projects.sort()
-            self.effects_widget.project_combo.blockSignals(True)
-            self.history_widget.project_combo.blockSignals(True)
-
-            self.effects_widget.project_combo.addItems(projects)
-            self.history_widget.project_combo.addItems(projects)
-
-            self.effects_widget.project_combo.blockSignals(False)
-            self.history_widget.project_combo.blockSignals(False)
-
-            if projects:
-                self.effects_widget.project_combo.setCurrentIndex(0)
-                self.history_widget.project_combo.setCurrentIndex(0)
-                self._refresh_backups_for_project(projects[0])
-        except Exception as e:
-            self._append_log(f"[LỖI] Không thể quét danh sách dự án: {e}")
+        self.doctor_controller.refresh_projects()
 
     def _refresh_backups_for_project(self, project_name: str) -> None:
-        self.history_widget.backup_combo.clear()
-        if not project_name:
-            self.history_widget.btn_restore_backup.setEnabled(False)
-            return
-
-        root_str = self.setup_widget.draft_root.text().strip()
-        if not root_str:
-            return
-
-        project_dir = Path(root_str) / project_name
-        primary_draft, _ = keyframe_tool.resolve_project_draft_paths(project_dir)
-
-        if not primary_draft or not primary_draft.exists():
-            self.history_widget.btn_restore_backup.setEnabled(False)
-            return
-
-        draft_dir = primary_draft.parent
-        project_dir_str = str(project_dir.resolve())
-
-        # 1. Quét các tệp sao lưu .bak thực tế trên đĩa
-        scanned_backups = {}
-        try:
-            if draft_dir.exists():
-                for f in draft_dir.iterdir():
-                    if f.is_file() and f.name.startswith(primary_draft.name) and f.suffix == '.bak':
-                        scanned_backups[str(f.resolve())] = f
-        except Exception as e:
-            self._append_log(f"[LỖI] Không thể quét danh sách bản sao lưu trên đĩa: {e}")
-            self.history_widget.btn_restore_backup.setEnabled(False)
-            return
-
-        # 2. Đồng bộ hóa với SQLite
-        from core.db import Database
-        from datetime import datetime
-        try:
-            conn = Database.get_connection()
-            cursor = conn.cursor()
-
-            # Lấy tất cả bản ghi hiện tại của dự án này trong DB
-            cursor.execute(
-                "SELECT id, backup_path, timestamp, note FROM backups WHERE project_dir = ?",
-                (project_dir_str,)
-            )
-            db_records = cursor.fetchall()
-            db_paths = {row["backup_path"]: row for row in db_records}
-
-            # Xóa các bản ghi mồ côi (có trong DB nhưng không có trên đĩa)
-            for db_path_str in list(db_paths.keys()):
-                if db_path_str not in scanned_backups:
-                    cursor.execute("DELETE FROM backups WHERE backup_path = ?", (db_path_str,))
-                    conn.commit()
-                    del db_paths[db_path_str]
-
-            # Thêm các tệp mới quét được trên đĩa nhưng chưa có trong DB
-            import uuid
-            for disk_path_str, f in scanned_backups.items():
-                if disk_path_str not in db_paths:
-                    backup_id = str(uuid.uuid4())
-                    # Thử tách timestamp từ tên tệp hoặc lấy thời gian thay đổi tệp
-                    # Định dạng tên: com.lveditor.draft.json.20260615_210400.bak hoặc com.lveditor.draft_bak_20260615_210400
-                    # Tách các phần bằng dấu chấm hoặc dấu gạch dưới
-                    ts_str = ""
-                    parts = f.name.replace('_', '.').split('.')
-                    for p in parts:
-                        if len(p) == 15 and p.isdigit(): # yyyymmddhhmmss
-                            pass
-                        # Tìm phần tử dạng 20260615 hoặc timestamp
-                        # Đối với format: draft_content.json.20260615_210400.bak, sau khi replace '_' bằng '.' ta có:
-                        # draft_content, json, 20260615, 210400, bak
-                    # Cách đơn giản: dùng regex hoặc so khớp substring 8 số liền nhau và 6 số liền nhau
-                    import re
-                    match = re.search(r"(\d{8})_(\d{6})", f.name)
-                    if match:
-                        try:
-                            dt = datetime.strptime(match.group(0), "%Y%m%d_%H%M%S")
-                            ts_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                        except Exception:
-                            pass
-                    if not ts_str:
-                        # Fallback lấy time mtime
-                        ts_str = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-
-                    cursor.execute(
-                        """
-                        INSERT INTO backups (id, project_dir, backup_path, timestamp, note)
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (backup_id, project_dir_str, disk_path_str, ts_str, "Bản sao lưu tự động (đồng bộ đĩa)")
-                    )
-                    conn.commit()
-
-            # 3. Nạp danh sách hoàn chỉnh từ SQLite đã được đồng bộ
-            cursor.execute(
-                "SELECT backup_path, timestamp, note FROM backups WHERE project_dir = ? ORDER BY timestamp DESC",
-                (project_dir_str,)
-            )
-            rows = cursor.fetchall()
-
-            for row in rows:
-                bp = Path(row["backup_path"])
-                display_text = f"{row['timestamp']} - {bp.name}"
-                if row["note"]:
-                    display_text += f" ({row['note']})"
-
-                # Thêm vào combobox cùng với đường dẫn tuyệt đối làm itemData
-                self.history_widget.backup_combo.addItem(display_text, row["backup_path"])
-
-            self.history_widget.btn_restore_backup.setEnabled(len(rows) > 0)
-
-        except Exception as e:
-            self._append_log(f"[LỖI] Không thể nạp danh sách bản sao lưu từ SQLite: {e}")
-            self.history_widget.btn_restore_backup.setEnabled(False)
+        self.doctor_controller.refresh_backups_for_project(project_name)
 
     def _run_keyframe_action(self, action: str, params: dict, project_name: str = None) -> None:
-        if self.thread and self.thread.isRunning():
-            QMessageBox.warning(self, "Cảnh báo", "Một tiến trình khác đang thực thi, vui lòng đợi.")
-            return
-
-        proj = project_name or self.effects_widget.project_combo.currentText()
-        if not proj:
-            QMessageBox.critical(self, "Lỗi", "Vui lòng chọn một dự án nháp mục tiêu!")
-            return
-
-        root_str = self.setup_widget.draft_root.text().strip()
-        project_dir = Path(root_str) / proj
-        primary_draft, _ = keyframe_tool.resolve_project_draft_paths(project_dir)
-
-        if not primary_draft or not primary_draft.exists():
-            QMessageBox.critical(self, "Lỗi", f"Không tìm thấy tệp draft_content.json tại {project_dir}")
-            return
-
-        self._save_config()
-        self.build_widget.clear_logs()
-        self._switch_to_page("build-center")
-
-        self.thread = QThread(self)
-        self.worker = KeyframeWorker(action, primary_draft, params)
-        self.worker.moveToThread(self.thread)
-
-        self.worker.log_signal.connect(self._append_log)
-        self.worker.finished_signal.connect(self._on_keyframe_finished)
-        self.worker.failed_signal.connect(self._on_keyframe_failed)
-
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished_signal.connect(self.thread.quit)
-        self.worker.failed_signal.connect(self.thread.quit)
-
-        self.worker.finished_signal.connect(self.worker.deleteLater)
-        self.worker.failed_signal.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(self._on_keyframe_thread_finished)
-
-        self._set_keyframe_ui_enabled(False)
-        self.build_widget.btn_run.setEnabled(False)
-
-        self.thread.start()
+        self.effects_controller.run_keyframe_action(action, params, project_name)
 
     @Slot(dict)
     def _on_keyframe_finished(self, result: dict) -> None:
-        action = result.get("action")
-        if action == "restore_backup":
-            QMessageBox.information(self, "Thành công", f"Khôi phục thành công dự án về bản sao lưu {result.get('backup_name')}!")
-        elif action == "repair_project":
-            actions_taken = result.get("actions_taken", [])
-            if actions_taken:
-                details = "\n".join(f"- {act}" for act in actions_taken)
-                msg = f"Đã thực hiện các hành động sửa lỗi sau:\n\n{details}"
-            else:
-                msg = "Không phát hiện lỗi nào cần sửa hoặc dự án đã tương thích hoàn toàn."
-            QMessageBox.information(self, "Kết quả sửa lỗi", msg)
-            self.history_widget.run_diagnose()
-        else:
-            changed = result.get("changed", 0)
-            QMessageBox.information(self, "Thành công", f"Đã áp dụng hiệu ứng thành công cho {changed} phân đoạn!")
-
-        self._refresh_backups_for_project(self.effects_widget.project_combo.currentText())
+        self.effects_controller._on_keyframe_finished(result)
 
     @Slot(str)
     def _on_keyframe_failed(self, message: str) -> None:
-        self._append_log(f"[LỖI] Thao tác thất bại: {message}")
-        QMessageBox.critical(self, "Thất bại", f"Thao tác thất bại:\n{message}")
+        self.effects_controller._on_keyframe_failed(message)
 
     @Slot()
     def _on_keyframe_thread_finished(self) -> None:
-        self._set_keyframe_ui_enabled(True)
-        self.build_widget.btn_run.setEnabled(True)
-        self.thread = None
-        self.worker = None
+        self.effects_controller._on_keyframe_thread_finished()
 
     def _set_keyframe_ui_enabled(self, enabled: bool) -> None:
-        self.effects_widget.setEnabled(enabled)
-        self.history_widget.setEnabled(enabled)
+        self.effects_controller.set_keyframe_ui_enabled(enabled)
 
     @Slot()
     def _apply_effect_click(self) -> None:
-        action = self.effects_widget.effect_type_combo.currentData()
-        segment = self.effects_widget.shared_segment_combo.currentData()
-        mode = self.effects_widget.shared_mode_combo.currentData()
-
-        if action == "presets":
-            preset_id = self.effects_widget.kf_preset_combo.currentData()
-            presets = []
-            if preset_id == "random":
-                presets = KEYFRAME_PRESETS
-            else:
-                custom = self._build_preset_from_params(preset_id, segment)
-                if custom:
-                    presets = [custom]
-                else:
-                    for p in KEYFRAME_PRESETS:
-                        if p["id"] == preset_id:
-                            presets = [p]
-                            break
-            if not presets:
-                return
-            params = {
-                "presets": presets,
-                "segment_type": segment,
-                "mode": mode
-            }
-            self._run_keyframe_action("apply_preset", params)
-
-        elif action == "custom":
-            prop = self.effects_widget.custom_prop_combo.currentData()
-            unit = self.effects_widget.custom_unit_combo.currentData()
-            from_val = self.effects_widget.custom_from_spin.value()
-            to_val = self.effects_widget.custom_to_spin.value()
-
-            keyframes = [{"at": 0.0, "value": from_val}]
-            if self.effects_widget.custom_mid_chk.isChecked():
-                mid_val = self.effects_widget.custom_mid_spin.value()
-                mid_at = self.effects_widget.custom_mid_time_spin.value() / 100.0
-                keyframes.append({"at": mid_at, "value": mid_val})
-            keyframes.append({"at": 1.0, "value": to_val})
-
-            op = {
-                "property": prop,
-                "keyframes": keyframes
-            }
-            if unit != "raw":
-                op["unit"] = unit
-            if prop in ("pos_x", "pos_y") and self.effects_widget.custom_clamp_chk.isChecked():
-                op["clamp_to_frame"] = True
-
-            presets = [{
-                "name": "Custom Dynamic Effect",
-                "segment": segment,
-                "operations": [op]
-            }]
-
-            params = {
-                "presets": presets,
-                "segment_type": segment,
-                "mode": mode
-            }
-            self._run_keyframe_action("apply_preset", params)
-
-        elif action == "transition":
-            trans_name = self.effects_widget.trans_preset_combo.currentData()
-            if trans_name == "custom":
-                name = self.effects_widget.trans_custom_name.text().strip()
-                if not name:
-                    QMessageBox.critical(self, "Lỗi", "Vui lòng nhập tên hiệu ứng chuyển cảnh tự chọn!")
-                    return
-            else:
-                name = trans_name
-
-            duration_sec = self.effects_widget.trans_duration_spin.value()
-            apply_all = self.effects_widget.trans_apply_all_chk.isChecked()
-
-            if trans_name == "random":
-                presets = [{"name": p["name"], "duration": p["duration"]} for p in TRANSITION_PRESETS]
-            else:
-                duration_us = int(duration_sec * 1_000_000)
-                presets = [{"name": name, "duration": duration_us}]
-
-            params = {
-                "transition_presets": presets,
-                "duration_sec": duration_sec,
-                "apply_all": apply_all,
-                "segment_type": segment,
-                "mode": mode
-            }
-            self._run_keyframe_action("apply_transition", params)
-
-        elif action == "speed":
-            speed_mode = self.effects_widget.speed_mode_combo.currentData()
-            speed_val = self.effects_widget.speed_val_spin.value()
-            params = {
-                "speed_mode": speed_mode,
-                "speed_value": speed_val
-            }
-            self._run_keyframe_action("apply_speed", params)
-
-        elif action == "scale":
-            scale_pct = self.effects_widget.scale_pct_spin.value()
-            skip_first = self.effects_widget.scale_skip_first_chk.isChecked()
-            params = {
-                "scale_percent": scale_pct,
-                "skip_first": skip_first
-            }
-            self._run_keyframe_action("apply_scale", params)
+        self.effects_controller.apply_effect_click()
 
     def _build_preset_from_params(self, preset_id: str, segment: str) -> Optional[dict]:
-        mapping = _PRESET_GROUP_MAP.get(preset_id)
-        if not mapping:
-            return None
-        group, defaults = mapping
-        pan_axis = defaults.get("pan_axis", "pos_x")
-
-        if group == "zoom":
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {"property": "scale_uniform",
-                     "from": self.effects_widget.param_zoom_from.value(),
-                     "to":   self.effects_widget.param_zoom_to.value(),
-                     "unit": "pct_base"}
-                ]
-            }
-        elif group == "bounce":
-            at = self.effects_widget.param_bounce_peak_at.value() / 100.0
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {
-                        "property": "scale_uniform",
-                        "keyframes": [
-                            {"at": 0.0, "value": self.effects_widget.param_bounce_from.value()},
-                            {"at": at,  "value": self.effects_widget.param_bounce_peak.value()},
-                            {"at": 1.0, "value": self.effects_widget.param_bounce_end.value()},
-                        ],
-                        "unit": "pct_base"
-                    }
-                ]
-            }
-        elif group == "pan":
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {"property": "scale_uniform",
-                     "from": self.effects_widget.param_pan_zoom.value(),
-                     "to":   self.effects_widget.param_pan_zoom.value(),
-                     "unit": "pct_base"},
-                    {"property": pan_axis,
-                     "from": self.effects_widget.param_pan_from.value(),
-                     "to":   self.effects_widget.param_pan_to.value()}
-                ]
-            }
-        elif group == "zoompan":
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {"property": "scale_uniform",
-                     "from": self.effects_widget.param_zp_zoom_from.value(),
-                     "to":   self.effects_widget.param_zp_zoom_to.value(),
-                     "unit": "pct_base"},
-                    {"property": pan_axis,
-                     "from": self.effects_widget.param_zp_pan_from.value(),
-                     "to":   self.effects_widget.param_zp_pan_to.value()}
-                ]
-            }
-        elif group == "rotate":
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {"property": "scale_uniform",
-                     "from": self.effects_widget.param_rot_zoom.value(),
-                     "to":   self.effects_widget.param_rot_zoom.value(),
-                     "unit": "pct_base"},
-                    {"property": "rotation",
-                     "from": self.effects_widget.param_rot_from.value(),
-                     "to":   self.effects_widget.param_rot_to.value()}
-                ]
-            }
-        elif group == "fade":
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {"property": "alpha",
-                     "from": self.effects_widget.param_fade_from.value(),
-                     "to":   self.effects_widget.param_fade_to.value()}
-                ]
-            }
-        elif group == "fadeinout":
-            in_end     = self.effects_widget.param_fio_in_end.value() / 100.0
-            out_start  = self.effects_widget.param_fio_out_start.value() / 100.0
-            return {
-                "id": preset_id, "name": preset_id, "segment": segment,
-                "operations": [
-                    {
-                        "property": "alpha",
-                        "keyframes": [
-                            {"at": 0.0,       "value": 0.0},
-                            {"at": in_end,    "value": 1.0},
-                            {"at": out_start, "value": 1.0},
-                            {"at": 1.0,       "value": 0.0},
-                        ]
-                    }
-                ]
-            }
-        return None
+        return self.effects_controller.build_preset_from_params(preset_id, segment)
 
     @Slot()
     def _restore_backup_click(self) -> None:
-        idx = self.history_widget.backup_combo.currentIndex()
-        if idx < 0:
-            return
-        backup_path_str = self.history_widget.backup_combo.itemData(idx)
-        if not backup_path_str:
-            return
-
-        backup_path = Path(backup_path_str)
-        backup_display = self.history_widget.backup_combo.itemText(idx)
-
-        reply = QMessageBox.question(
-            self,
-            "Xác nhận khôi phục",
-            f"Bạn có thực sự muốn khôi phục timeline dự án về bản sao lưu:\n'{backup_display}' không?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            params = {
-                "backup_path": str(backup_path)
-            }
-            proj = self.history_widget.project_combo.currentText()
-            self._run_keyframe_action("restore_backup", params, project_name=proj)
+        self.doctor_controller.restore_backup_click()
 
     @Slot()
     def _clean_backups_click(self) -> None:
-        proj = self.history_widget.project_combo.currentText()
-        if not proj:
-            QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn một dự án trước!")
-            return
-
-        root_str = self.setup_widget.draft_root.text().strip()
-        if not root_str:
-            return
-
-        project_dir  = Path(root_str) / proj
-        primary_draft, _ = keyframe_tool.resolve_project_draft_paths(project_dir)
-        if not primary_draft:
-            return
-
-        keep_days  = int(self.history_widget.backup_keep_days.value())
-
-        try:
-            import draft_doctor
-            deleted, skipped = draft_doctor.clean_project_backups(primary_draft, keep_days)
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi", f"Không thể dọn backup: {e}")
-            return
-
-        self._append_log(
-            f"[THÀNH CÔNG] Dọn backup: đã xóa {deleted} file, giữ lại {skipped} file (chưa đủ {keep_days} ngày)."
-        )
-        QMessageBox.information(
-            self, "Hoàn thành",
-            f"Đã xóa {deleted} tệp sao lưu cũ hơn {keep_days} ngày khỏi đĩa và SQLite.\nGiữ lại {skipped} tệp gần đây."
-        )
-        self._refresh_backups_for_project(proj)
+        self.doctor_controller.clean_backups_click()
 
     @Slot()
     def _repair_project_click(self) -> None:
-        proj = self.history_widget.project_combo.currentText()
-        if not proj:
-            QMessageBox.critical(self, "Lỗi", "Vui lòng chọn một dự án nháp mục tiêu cần sửa!")
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Xác nhận tự động sửa lỗi",
-            f"Bạn có chắc muốn tự động sửa các lỗi tương thích, đường dẫn và liên kết file của dự án '{proj}' không?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        media_dir_val = self.history_widget.relink_media_dir.text().strip()
-        if not media_dir_val:
-            media_dir_val = self.setup_widget.media_dir.text().strip()
-
-        params = {
-            "media_dir": media_dir_val
-        }
-        self._run_keyframe_action("repair_project", params, project_name=proj)
+        self.doctor_controller.repair_project_click()
 
     def _load_config(self) -> None:
-        if CONFIG_PATH.exists():
-            try:
-                cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-                self.setup_widget.project_name.setText(cfg.get("project_name", "Du_An_CapCut"))
-
-                saved_root = cfg.get("draft_root", "")
-                if saved_root and Path(saved_root).exists():
-                    self.setup_widget.draft_root.setText(saved_root)
-                else:
-                    detected = keyframe_tool.detect_capcut_draft_root()
-                    if detected:
-                        self.setup_widget.draft_root.setText(str(detected))
-                    elif saved_root:
-                        self.setup_widget.draft_root.setText(saved_root)
-
-                self.setup_widget.voice_path.setText(cfg.get("voice_path", ""))
-                self.setup_widget.media_dir.setText(cfg.get("media_dir", ""))
-                self.setup_widget.bgm_path.setText(cfg.get("bgm_path", ""))
-                self.setup_widget.srt_path.setText(cfg.get("srt_path", ""))
-
-                self.effects_widget.logo_path.setText(cfg.get("logo_path", ""))
-                logo_pos = cfg.get("logo_position", "top_right")
-                idx = self.effects_widget.logo_position.findData(logo_pos)
-                if idx >= 0:
-                    self.effects_widget.logo_position.setCurrentIndex(idx)
-                self.effects_widget.logo_scale.setValue(cfg.get("logo_scale", 15.0))
-
-                self.effects_widget.anim_path.setText(cfg.get("anim_path", ""))
-                anim_pos = cfg.get("anim_position", "bottom_center")
-                idx = self.effects_widget.anim_position.findData(anim_pos)
-                if idx >= 0:
-                    self.effects_widget.anim_position.setCurrentIndex(idx)
-                self.effects_widget.anim_scale.setValue(cfg.get("anim_scale", 30.0))
-                anim_time = cfg.get("anim_timing", "end")
-                idx = self.effects_widget.anim_timing.findData(anim_time)
-                if idx >= 0:
-                    self.effects_widget.anim_timing.setCurrentIndex(idx)
-
-                if cfg.get("canvas") == "16:9":
-                    self.setup_widget.ratio_16_9.setChecked(True)
-                else:
-                    self.setup_widget.ratio_9_16.setChecked(True)
-
-                self.setup_widget.clip_min.setValue(cfg.get("clip_min_sec", 5.0))
-                self.setup_widget.clip_max.setValue(cfg.get("clip_max_sec", 9.0))
-
-                mode_str = cfg.get("selection_mode", "shuffle_bag")
-                if "sequential" in mode_str:
-                    self.setup_widget.selection_mode.setCurrentIndex(1)
-                elif "random" in mode_str:
-                    self.setup_widget.selection_mode.setCurrentIndex(2)
-                elif "duplicate_then_shuffle" in mode_str:
-                    self.setup_widget.selection_mode.setCurrentIndex(3)
-                elif "shuffle_duplicates_only" in mode_str:
-                    self.setup_widget.selection_mode.setCurrentIndex(4)
-                else:
-                    self.setup_widget.selection_mode.setCurrentIndex(0)
-
-                short_video_mode = cfg.get("short_video_mode", "stretch")
-                if short_video_mode == "loop":
-                    self.setup_widget.short_video_mode.setCurrentIndex(1)
-                else:
-                    self.setup_widget.short_video_mode.setCurrentIndex(0)
-
-                bg_switch_mode = cfg.get("bg_switch_mode", "time")
-                idx = self.setup_widget.bg_switch_mode.findData(bg_switch_mode)
-                if idx >= 0:
-                    self.setup_widget.bg_switch_mode.setCurrentIndex(idx)
-                self.setup_widget.bg_switch_group_size.setValue(cfg.get("bg_switch_group_size", 3))
-
-                self.setup_widget.recursive_scan.setChecked(cfg.get("recursive_scan", False))
-
-                auto_kf_id = cfg.get("auto_kf_id")
-                if auto_kf_id:
-                    idx = self.setup_widget.auto_kf_combo.findData(auto_kf_id)
-                    self.setup_widget.auto_kf_combo.setCurrentIndex(max(0, idx))
-
-                auto_trans_id = cfg.get("auto_trans_id")
-                if auto_trans_id:
-                    idx = self.setup_widget.auto_trans_combo.findData(auto_trans_id)
-                    self.setup_widget.auto_trans_combo.setCurrentIndex(max(0, idx))
-
-                self.setup_widget.auto_trans_dur.setValue(cfg.get("auto_trans_dur_val", 0.4))
-
-                # Load subtitle styling settings
-                subtitle_font = cfg.get("subtitle_font", "SystemFont")
-                idx = self.setup_widget.subtitle_font.findText(subtitle_font)
-                if idx >= 0:
-                    self.setup_widget.subtitle_font.setCurrentIndex(idx)
-                self.setup_widget.subtitle_font_size.setValue(cfg.get("subtitle_font_size", 6.0))
-                self.setup_widget.subtitle_color.setText(cfg.get("subtitle_color", "#FFFFFF"))
-
-                align = cfg.get("subtitle_align", "bottom_center")
-                idx = self.setup_widget.subtitle_align.findData(align)
-                if idx >= 0:
-                    self.setup_widget.subtitle_align.setCurrentIndex(idx)
-
-                self.setup_widget.subtitle_outline_width.setValue(cfg.get("subtitle_outline_width", 40.0))
-                self.setup_widget.subtitle_shadow_alpha.setValue(cfg.get("subtitle_shadow_alpha", 0.8))
-                self.setup_widget.subtitle_shadow_distance.setValue(cfg.get("subtitle_shadow_distance", 5.0))
-
-                self.setup_widget.subtitle_bold.setChecked(cfg.get("subtitle_bold", True))
-                self.setup_widget.subtitle_italic.setChecked(cfg.get("subtitle_italic", False))
-                self.setup_widget.subtitle_underline.setChecked(cfg.get("subtitle_underline", False))
-                self.setup_widget.subtitle_shadow.setChecked(cfg.get("subtitle_shadow", True))
-                self.setup_widget._update_subtitle_preview()
-
-                self._refresh_projects()
-                last_project = cfg.get("last_selected_project", "")
-                if last_project:
-                    idx = self.effects_widget.project_combo.findText(last_project)
-                    if idx >= 0:
-                        self.effects_widget.project_combo.setCurrentIndex(idx)
-                    idx_hist = self.history_widget.project_combo.findText(last_project)
-                    if idx_hist >= 0:
-                        self.history_widget.project_combo.setCurrentIndex(idx_hist)
-                self.history_widget.backup_keep_days.setValue(cfg.get("backup_keep_days", 7.0))
-                self._current_profile_name = cfg.get("last_selected_profile", "Mặc định")
-                return
-            except Exception as e:
-                try:
-                    self._append_log(f"[CẢNH BÁO] Không đọc được config.json (sẽ tự dò tìm lại): {e}")
-                except Exception:
-                    pass
-
-        detected = keyframe_tool.detect_capcut_draft_root()
-        if detected:
-            self.setup_widget.draft_root.setText(str(detected))
-        self._refresh_projects()
+        self.settings_controller.load_config(CONFIG_PATH)
 
     def _save_config(self) -> None:
-        canvas = "9:16"
-        if self.setup_widget.ratio_16_9.isChecked():
-            canvas = "16:9"
-
-        selection_idx = self.setup_widget.selection_mode.currentIndex()
-        selection_mode = {
-            1: "sequential",
-            2: "random",
-            3: "duplicate_then_shuffle",
-            4: "shuffle_duplicates_only",
-        }.get(selection_idx, "shuffle_bag")
-
-        short_video_mode = "loop" if self.setup_widget.short_video_mode.currentIndex() == 1 else "stretch"
-
-        cfg = {
-            "project_name": self.setup_widget.project_name.text().strip(),
-            "draft_root": self.setup_widget.draft_root.text().strip(),
-            "voice_path": self.setup_widget.voice_path.text().strip(),
-            "media_dir": self.setup_widget.media_dir.text().strip(),
-            "bgm_path": self.setup_widget.bgm_path.text().strip(),
-            "srt_path": self.setup_widget.srt_path.text().strip(),
-            "logo_path": self.effects_widget.logo_path.text().strip(),
-            "logo_position": self.effects_widget.logo_position.currentData() or "top_right",
-            "logo_scale": self.effects_widget.logo_scale.value(),
-            "anim_path": self.effects_widget.anim_path.text().strip(),
-            "anim_position": self.effects_widget.anim_position.currentData() or "bottom_center",
-            "anim_scale": self.effects_widget.anim_scale.value(),
-            "anim_timing": self.effects_widget.anim_timing.currentData() or "end",
-            "canvas": canvas,
-            "clip_min_sec": self.setup_widget.clip_min.value(),
-            "clip_max_sec": self.setup_widget.clip_max.value(),
-            "selection_mode": selection_mode,
-            "short_video_mode": short_video_mode,
-            "bg_switch_mode": self.setup_widget.bg_switch_mode.currentData() or "time",
-            "bg_switch_group_size": self.setup_widget.bg_switch_group_size.value(),
-            "recursive_scan": self.setup_widget.recursive_scan.isChecked(),
-            "auto_kf_id": self.setup_widget.auto_kf_combo.currentData() or "none",
-            "auto_trans_id": self.setup_widget.auto_trans_combo.currentData() or "none",
-            "auto_trans_dur_val": self.setup_widget.auto_trans_dur.value(),
-            "last_selected_project": self.effects_widget.project_combo.currentText(),
-            "last_selected_profile": getattr(self, "_current_profile_name", "Mặc định"),
-            "backup_keep_days": self.history_widget.backup_keep_days.value(),
-
-            # Subtitle styling settings
-            "subtitle_font": self.setup_widget.subtitle_font.currentText(),
-            "subtitle_font_size": self.setup_widget.subtitle_font_size.value(),
-            "subtitle_color": self.setup_widget.subtitle_color.text().strip(),
-            "subtitle_align": self.setup_widget.subtitle_align.currentData() or "bottom_center",
-            "subtitle_outline_width": self.setup_widget.subtitle_outline_width.value(),
-            "subtitle_shadow_alpha": self.setup_widget.subtitle_shadow_alpha.value(),
-            "subtitle_shadow_distance": self.setup_widget.subtitle_shadow_distance.value(),
-            "subtitle_bold": self.setup_widget.subtitle_bold.isChecked(),
-            "subtitle_italic": self.setup_widget.subtitle_italic.isChecked(),
-            "subtitle_underline": self.setup_widget.subtitle_underline.isChecked(),
-            "subtitle_shadow": self.setup_widget.subtitle_shadow.isChecked()
-        }
-
-        try:
-            CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
+        self.settings_controller.save_config(CONFIG_PATH)
 
     def _update_step_widget(self, code: str, status: str, message: str = "") -> None:
         self.build_widget.update_step_widget(code, status, message)
@@ -1910,15 +1228,17 @@ class MainWindow(QMainWindow):
         capcut_exe = find_capcut_executable()
         
         msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Thành Công ✨")
+        msg_box.setWindowTitle("Thành Công")
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setText(f"Dự án nháp CapCut '{proj_name}' đã được tạo thành công!")
         msg_box.setInformativeText(f"Vị trí: {draft_path}\n\nLựa chọn hành động:")
         
         btn_capcut = None
         if capcut_exe:
-            btn_capcut = msg_box.addButton("🎬 Mở Trực Tiếp CapCut PC", QMessageBox.ButtonRole.AcceptRole)
-        btn_open = msg_box.addButton("🚀 Mở Thư Mục Dự Án", QMessageBox.ButtonRole.ActionRole)
+            btn_capcut = msg_box.addButton("Mở Trực Tiếp CapCut PC", QMessageBox.ButtonRole.AcceptRole)
+            btn_capcut.setIcon(get_svg_icon("capcut", color="#ffffff", size=16))
+        btn_open = msg_box.addButton("Mở Thư Mục Dự Án", QMessageBox.ButtonRole.ActionRole)
+        btn_open.setIcon(get_svg_icon("folder", color="#ffffff", size=16))
         msg_box.addButton("Đóng", QMessageBox.ButtonRole.RejectRole)
         
         msg_box.exec()
@@ -2139,6 +1459,9 @@ class MainWindow(QMainWindow):
         pos = self.search_bar.mapToGlobal(self.search_bar.rect().bottomLeft())
         self._search_menu.setMinimumWidth(self.search_bar.width())
         self._search_menu.popup(pos)
+        # Restore focus to search_bar so typing can continue without popup stealing focus
+        self.search_bar.setFocus(Qt.FocusReason.OtherFocusReason)
+        QTimer.singleShot(0, lambda: self.search_bar.setFocus(Qt.FocusReason.OtherFocusReason))
 
     def _handle_search_project(self, proj_name: str) -> None:
         idx1 = self.effects_widget.project_combo.findText(proj_name)

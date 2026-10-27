@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QTextBrowser,
     QMessageBox,
 )
+from app.widgets.setup_widget import DropLineEdit
 
 class LogViewerDialog(QDialog):
     def __init__(self, job_data: dict, parent=None):
@@ -57,7 +58,7 @@ class LogViewerDialog(QDialog):
                 border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 6px;
                 color: {COLOR_TEXT_LIGHT};
-                font-family: 'Consolas', 'JetBrains Mono', monospace;
+                font-family: 'JetBrains Mono', 'Consolas', monospace;
                 font-size: 11px;
             }}
             QPushButton {{
@@ -69,7 +70,8 @@ class LogViewerDialog(QDialog):
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: #0bc0a9;
+                background-color: #00F2FE;
+                opacity: 0.9;
             }}
         """)
         
@@ -326,8 +328,7 @@ class HistoryWidget(QWidget):
         # Relink directory input
         relink_row = QHBoxLayout()
         relink_row.addWidget(self._create_field_label("Thư mục Relink:"))
-        self.relink_media_dir = QLineEdit()
-        self.relink_media_dir.setPlaceholderText("Để trống nếu dùng Thư mục video/hình nền mặc định...")
+        self.relink_media_dir = DropLineEdit("Để trống nếu dùng Thư mục video/hình nền mặc định...")
         relink_row.addWidget(self.relink_media_dir, 1)
 
         self.btn_browse_relink = QPushButton("Chọn...")
@@ -465,21 +466,25 @@ class HistoryWidget(QWidget):
             self.history_table.setRowCount(len(rows))
             
             status_translation = {
-                "pending": "⏳ Chờ",
-                "running": "🔵 Dựng...",
-                "completed": "OK",
-                "success": "OK",
-                "failed": "LỖI",
-                "error": "LỖI",
-                "cancelled": "C.B"
+                "pending": "Chờ",
+                "running": "Đang dựng",
+                "completed": "Hoàn thành",
+                "success": "Hoàn thành",
+                "failed": "Lỗi",
+                "error": "Lỗi",
+                "cancelled": "Đã hủy"
             }
             
             status_colors = {
-                "OK": COLOR_SUCCESS,
+                "HOÀN THÀNH": COLOR_SUCCESS,
                 "LỖI": COLOR_ERROR,
+                "ĐÃ HỦY": COLOR_WARNING,
+                "CHỜ": COLOR_WARNING,
+                "ĐANG DỰNG": "#00F2FE",
+                "OK": COLOR_SUCCESS,
                 "C.B": COLOR_WARNING,
                 "pending": COLOR_WARNING,
-                "running": "#60a5fa"
+                "running": "#00F2FE"
             }
 
             for idx, job_data in enumerate(rows):

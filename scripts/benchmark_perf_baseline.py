@@ -252,6 +252,7 @@ def run_benchmark() -> None:
 Mock timings validate Python call paths only. They do not measure real ffprobe CPU usage.
 """
         report_path = PROJECT_ROOT / "scratch" / "performance_baseline.md"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(report, encoding="utf-8")
         print(f"Pretty serialization: {_format_stats(pretty_stats)}")
         print(f"Compact serialization: {_format_stats(compact_stats)}")

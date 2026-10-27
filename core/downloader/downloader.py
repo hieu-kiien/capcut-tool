@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
@@ -53,7 +53,24 @@ class DownloadSummary:
     succeeded: int
     failed: int
     output_dir: str
-    results: list[DownloadItemResult]
+    results: list[DownloadItemResult] = field(default_factory=list)
+
+
+def _format_downloader_error(raw_line: str, exit_code: int = 1) -> str:
+    """Classifies raw downloader errors into clear, user-friendly explanations."""
+    line_lower = raw_line.lower()
+    if "confirm you're not a bot" in line_lower or "sign in to confirm" in line_lower:
+        return "Bị chặn bot: Cần cung cấp cookies.txt"
+    if "429" in line_lower or "too many requests" in line_lower:
+        return "Quá nhiều yêu cầu (Rate Limit 429): Thử lại sau hoặc dùng Proxy"
+    if "private video" in line_lower or "video unavailable" in line_lower:
+        return "Video riêng tư hoặc không khả dụng"
+    if "age restricted" in line_lower or "nsfw" in line_lower:
+        return "Video giới hạn độ tuổi: Cần cookies.txt"
+    if raw_line:
+        clean = raw_line.replace("ERROR: ", "").replace("[youtube] ", "").replace("[generic] ", "").strip()
+        return clean[:100]
+    return f"Thất bại (Mã thoát {exit_code})"
 
 def parse_url_list(raw_text: str) -> list[str]:
     urls: list[str] = []
@@ -128,7 +145,10 @@ def build_gallerydl_command(
     max_file_size = _max_file_size_bytes(options)
     if max_file_size > 0:
         args.extend(["--filesize-max", str(max_file_size)])
-    args.append(url)
+    # Validate here too, not only in the runner. build_ytdlp_command() already
+    # does this at its own append site; matching that keeps the builder safe for
+    # any caller, including tests and future entry points that bypass the runner.
+    args.append(_validate_url(url))
     return args
 
 def get_ytdlp_version(command: list[str]) -> str:
@@ -441,6 +461,7 @@ class YtDlpDownloadRunner:
         
         last_percent = "0%"
         output_path = ""
+        last_error_line = ""
         try:
             for line in _iter_process_output(process, options, self._cancel_event):
                 if self._cancel_event.is_set():
@@ -460,6 +481,8 @@ class YtDlpDownloadRunner:
                 text = line.strip()
                 if text:
                     _emit(progress, f"{prefix} {text}")
+                    if "error" in text.lower() or "warning" in text.lower():
+                        last_error_line = text
                     pct, out_p = parse_ytdlp_line(text)
                     if pct:
                         last_percent = pct
@@ -480,9 +503,10 @@ class YtDlpDownloadRunner:
                 return False
             raise DownloadCancelled("Đã hủy tải media.")
         if return_code != 0:
-            _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}.")
+            friendly_err = _format_downloader_error(last_error_line, return_code)
+            _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}: {friendly_err}")
             if item_progress:
-                item_progress(index, "failed", "Lỗi", output_path, f"Exit code {return_code}")
+                item_progress(index, "failed", "Lỗi", output_path, friendly_err)
             return False
         if _output_exceeds_limit(output_path, options):
             error = f"File vượt quá giới hạn {int(options.max_file_size_mb)} MB"
@@ -516,7 +540,7 @@ class YtDlpDownloadRunner:
         _emit(progress, f"{prefix} Bắt đầu: {url}")
         
         if item_progress:
-            item_progress(index, "downloading", "Đang tải", "", "")
+            item_progress(index, "downloading", "0%", "", "")
 
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         process = subprocess.Popen(
@@ -532,6 +556,7 @@ class YtDlpDownloadRunner:
             self._processes[index] = process
         
         output_path = ""
+        last_error_line = ""
         try:
             for line in _iter_process_output(process, options, self._cancel_event):
                 if self._cancel_event.is_set():
@@ -551,6 +576,8 @@ class YtDlpDownloadRunner:
                 text = line.strip()
                 if text:
                     _emit(progress, f"{prefix} {text}")
+                    if "error" in text.lower() or "warning" in text.lower():
+                        last_error_line = text
                     pct, out_p = parse_gallerydl_line(text)
                     if out_p:
                         output_path = out_p
@@ -568,9 +595,10 @@ class YtDlpDownloadRunner:
                 return False
             raise DownloadCancelled("Đã hủy tải media.")
         if return_code != 0:
-            _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}.")
+            friendly_err = _format_downloader_error(last_error_line, return_code)
+            _emit(progress, f"{prefix} Thất bại với mã thoát {return_code}: {friendly_err}")
             if item_progress:
-                item_progress(index, "failed", "Lỗi", output_path, f"Exit code {return_code}")
+                item_progress(index, "failed", "Lỗi", output_path, friendly_err)
             return False
         if _output_exceeds_limit(output_path, options):
             error = f"File vượt quá giới hạn {int(options.max_file_size_mb)} MB"
@@ -620,17 +648,19 @@ class YtDlpDownloadRunner:
         except DownloadCancelled:
             raise
         except Exception as exc:
-            _emit(progress, f"{prefix} Thất bại: {exc}")
+            friendly_err = _format_downloader_error(str(exc), 1)
+            _emit(progress, f"{prefix} Thất bại: {friendly_err}")
             if item_progress:
-                item_progress(index, "failed", "Lỗi", "", str(exc))
+                item_progress(index, "failed", "Lỗi", "", friendly_err)
             return False
 
         if self._cancel_event.is_set():
             raise DownloadCancelled("Đã hủy tải media.")
         if result_code != 0:
-            _emit(progress, f"{prefix} Thất bại với mã thoát {result_code}.")
+            friendly_err = _format_downloader_error(f"Thất bại với mã thoát {result_code}", result_code)
+            _emit(progress, f"{prefix} {friendly_err}")
             if item_progress:
-                item_progress(index, "failed", "Lỗi", "", f"Exit code {result_code}")
+                item_progress(index, "failed", "Lỗi", "", friendly_err)
             return False
 
         _emit(progress, f"{prefix} Hoàn thành.")

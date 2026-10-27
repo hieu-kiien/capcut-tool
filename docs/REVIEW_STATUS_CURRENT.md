@@ -6,7 +6,7 @@ Tai lieu nay la trang thai review hien tai. Cac handoff/backlog cu da duoc dua v
 
 ### 1. Draft folder path safety
 
-- File chinh: `pyJianYingDraft/draft_folder.py`, `app/path_validation.py`.
+- File chinh: `pyJianYingDraft/draft_folder.py`, `core/path_validation.py`.
 - Cac thao tac draft quan trong da di qua helper validate project/draft name.
 - `remove("../outside")` va `duplicate_as_template("template", "../outside")` duoc test de dam bao khong thao tac ngoai draft root.
 
@@ -25,10 +25,14 @@ Tai lieu nay la trang thai review hien tai. Cac handoff/backlog cu da duoc dua v
 
 ### 4. Downloader validation
 
-- File chinh: `app/downloader.py`.
-- URL input chi nhan `http`/`https`.
-- Command cho `yt-dlp`/`gallery-dl` duoc build bang argv list, khong shell string.
-- History/log can tiep tuc tranh luu ro URL/cookie nhay cam khi thay doi downloader.
+- File chinh: `core/downloader/downloader.py` (908 dong). **Luu y:** `app/downloader.py` chi la shim 31 dong re-export, khong con logic. Truoc 2026-08-07 muc nay ghi sai file, nen ket luan bao mat da tung duoc xac minh tren file khong co code.
+- Xac minh lai tren file that ngay 2026-08-07:
+  - Khong co `shell=True`, `os.system`, `os.popen`. Ca 3 cho spawn process deu dung argv list.
+  - `_validate_url` chan ky tu dieu khien, metachar `;` `|` `` ` `` `$`, va chi cho `http`/`https` co netloc.
+  - Moi duong vao URL deu di qua no: `parse_url_list`, `build_ytdlp_command`, `build_gallerydl_command`, `YtDlpDownloadRunner.run`, va `ydl.download` o library mode.
+  - Cookie/archive path qua `_validate_optional_file` (resolve + bat buoc ton tai). Output dir qua `_prepare_output_dir`.
+  - Khong log nao dump argv, nen duong dan cookie khong lo ra progress hay job history.
+- Da sua trong dot audit: `build_gallerydl_command` append `url` tho trong khi `build_ytdlp_command` append `_validate_url(url)`. Khong khai thac duoc (runner da validate ca list o `:278` truoc khi goi builder o `:514`), nhung la bat doi xung phong thu. Gio ca hai builder deu validate tai cho.
 
 ### 5. Pipeline smoke
 
@@ -54,7 +58,15 @@ Tai lieu nay la trang thai review hien tai. Cac handoff/backlog cu da duoc dua v
 - `ScanWorker` kiem tra ca cancel flag va `QThread.requestInterruption()`.
 - Main window chi dong khi pipeline, scan va media-studio worker da dung trong timeout.
 - Benchmark dung warm-up + 5 vong, bao median/min/max va tach mock call count khoi ffprobe that.
-- Xac minh 2026-06-19: `86/86` test pass va `compileall` pass.
+- Xac minh 2026-08-07: `98/98` test pass trong 11.95s, `compileall` pass, `main.py --diagnose-json` bao `ok: true`.
+
+### 9. Queue mutex deadlock (fix 2026-08-07)
+
+- File chinh: `app/queue_manager.py :: BatchQueueManager`.
+- `_finish_current_job()` goi tiep `_run_next_job()` de chay job ke tiep, nhung `_run_next_job()` lay `QMutexLocker(self._mutex)`. `QMutex` khong reentrant, nen khi mot job ket thuc dong bo tren cung thread thi khoa bi vao lai va treo vinh vien.
+- Trieu chung: `python -m pytest -q tests` treo vo han (khong output). Test lo ra loi nay la `tests/test_build_queue.py::test_queue_run_next_logic`, vi no mock `QThread.start` de chay dong bo.
+- Fix: doi sang `QRecursiveMutex`. Them `timeout = 120` vao `pytest.ini` de mot deadlock khong the treo ca suite.
+- Anh huong that: bug nay khong chi o test. Bat ky job nao that bai/hoan thanh dong bo trong queue that cung se treo queue.
 
 ## Ket qua xac minh moi nhat
 
@@ -62,7 +74,7 @@ Tai lieu nay la trang thai review hien tai. Cac handoff/backlog cu da duoc dua v
 - **Pipeline success nho**: Tao draft qua Python PASS, parse JSON thanh cong.
 - **CapCut compact compatibility**: BLOCKED_EXTERNAL (Da copy JSON vao `Projects` nhung can CapCut PC that de mo va xac minh).
 - **Real ffprobe benchmark**: BLOCKED_EXTERNAL (Thieu 5-10 media hop le tu nguoi dung).
-- **Regression suite**: 86/86 PASS, compileall OK. Không phat sinh loi do sua doi.
+- **Regression suite**: 98/98 PASS trong 11.95s, compileall OK (xac minh 2026-08-07). Truoc do full suite khong the chay den cuoi vi deadlock o muc 9.
 
 ## Viec con nen lam (De dat 10/10)
 

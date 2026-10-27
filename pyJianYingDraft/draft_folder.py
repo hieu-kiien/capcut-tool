@@ -9,6 +9,7 @@ from pathlib import Path
 
 from typing import List
 
+from core.path_validation import validate_project_name
 from . import assets
 from .script_file import ScriptFile
 
@@ -34,7 +35,6 @@ class DraftFolder:
 
     def _resolve_draft_path(self, draft_name: str) -> str:
         """Validate draft name and resolve safe absolute path inside folder_path."""
-        from core.path_validation import validate_project_name
         resolved_draft = validate_project_name(draft_name, self.folder_path)
         return str(resolved_draft)
 

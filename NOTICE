@@ -1,0 +1,109 @@
+CapCut Long Story Studio
+========================
+
+This product bundles third-party open source software. Attributions and
+license terms follow.
+
+
+-------------------------------------------------------------------------------
+pyJianYingDraft
+-------------------------------------------------------------------------------
+
+Vendored at: pyJianYingDraft/  (~20,200 lines)
+
+    Copyright 2024 Gary Guan
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+Upstream project: https://github.com/GuanYixuan/pyJianYingDraft
+License:          Apache License 2.0
+Upstream version: v0.2.x series (~2024 baseline)
+
+MODIFICATIONS & LOCAL PATCHES
+-----------------------------
+
+Per Apache License 2.0 section 4(b), the following changes were made to the
+vendored copy. See full details in `docs/VENDORED_PYJIANYINGDRAFT.md`:
+
+  1. pyJianYingDraft/draft_folder.py:
+     Validates project names via `core.path_validation.validate_project_name`
+     to constrain draft operations to draft root, guarding against path traversal.
+     Import hoisted to module scope per PEP 8.
+
+  2. pyJianYingDraft/script_file.py:
+     Integrated fast `orjson` serialization with fallback to stdlib `json`.
+     Optimized materials duplicate check from O(N) list to O(1) set.
+
+  3. pyJianYingDraft/track.py:
+     Added O(1) fast-path chronological `add_segment` when appending media.
+
+  4. Decoupling:
+     Eliminated cyclical dependencies back to the `app` package.
+
+PINNING & MAINTENANCE
+---------------------
+
+Baseline established against GuanYixuan/pyJianYingDraft v0.2.x series.
+Local modifications are maintained as an auditable patch set documented in
+`docs/VENDORED_PYJIANYINGDRAFT.md`. Future upstream merges should re-apply
+these patches on top of upstream releases.
+
+
+-------------------------------------------------------------------------------
+FFmpeg / FFprobe
+-------------------------------------------------------------------------------
+
+Bundled binaries: tools/ffmpeg/
+
+The bundled build ships GNU GENERAL PUBLIC LICENSE Version 3 at:
+
+    tools/ffmpeg/ffmpeg-8.1.1-essentials_build/LICENSE
+
+This is the **GPL v3** build (the Gyan.dev "essentials" builds are configured
+with --enable-gpl), not an LGPL build.
+
+    ATTENTION — this affects how this application may be distributed.
+
+GPL v3 is a strong copyleft license. Shipping these binaries inside a
+distributable bundle can extend GPL obligations to the work as a whole,
+depending on how the two are combined and distributed. Invoking ffmpeg.exe as a
+separate process (which is what this application does — see runtime_tools.py)
+is generally treated more favourably than linking, but bundling the GPL binary
+in the same installer is a distribution of that binary and carries its own
+requirements, including making the corresponding source available.
+
+This has not been reviewed by a lawyer, and this file is not legal advice. For
+commercial or closed-source distribution, the application provides built-in tools
+in `runtime_tools.py` (`get_ffmpeg_license_info()`, `is_ffmpeg_lgpl()`):
+
+  1. Dual-Distribution Support: The application resolves FFmpeg from PATH,
+     environment variables (`CAPCUT_TOOL_FFMPEG`), or local folders. Distributors
+     can ship without bundled binaries (unbundled mode) or supply LGPL-built binaries.
+  2. LGPL Switch: To distribute with bundled FFmpeg legally under LGPL, replace
+     the binaries with Gyan.dev or BtbN "shared-lgpl" builds (compiled without --enable-gpl).
+  3. Source Availability: If distributing with GPL binaries, distribute the matching
+     source code alongside the application bundle as mandated by GPL v3 section 6.
+
+Upstream project: https://ffmpeg.org/
+Bundled build:    Gyan.dev essentials, FFmpeg 8.1.1 (GPL v3 build)
+Programmatic API: `runtime_tools.is_ffmpeg_lgpl()`
+
+
+-------------------------------------------------------------------------------
+Python dependencies
+-------------------------------------------------------------------------------
+
+Runtime dependencies are declared in requirements.txt and are installed from
+PyPI rather than vendored. They retain their own licenses, which are not
+reproduced here. PySide6 in particular is offered under the LGPL v3 and a
+commercial license; verify which applies to your distribution.

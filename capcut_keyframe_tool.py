@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 import time
+from core.logger import logger
 
 DEFAULT_ROOT = Path(r'C:\Users\Admin\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft')
 
@@ -75,8 +76,13 @@ def segment_duration(seg):
 
 def _load_draft(path):
     """Load draft_content.json và trả về (data, material_sets)."""
-    with path.open('r', encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        import orjson
+        with open(path, 'rb') as f:
+            data = orjson.loads(f.read())
+    except Exception:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
     mats = data.get('materials') or {}
     images = mats.get('images') or []
     videos = mats.get('videos') or []
@@ -118,7 +124,7 @@ def _add_backup_record(project_dir, backup_path, note=""):
         )
         conn.commit()
     except Exception as e:
-        print(f"Error adding backup record to SQLite: {e}")
+        logger.error(f"[KEYFRAME TOOL] Error adding backup record to SQLite: {e}")
 
 
 def _remove_backup_record(backup_path):
@@ -129,7 +135,7 @@ def _remove_backup_record(backup_path):
         cursor.execute("DELETE FROM backups WHERE backup_path = ?", (str(backup_path),))
         conn.commit()
     except Exception as e:
-        print(f"Error removing backup record from SQLite: {e}")
+        logger.error(f"[KEYFRAME TOOL] Error removing backup record from SQLite: {e}")
 
 
 def _prune_backups(path, keep=MAX_BACKUPS):
@@ -158,10 +164,18 @@ def _atomic_write_json(path, data):
     """Ghi JSON an toàn: ghi ra file tạm rồi os.replace (nguyên tử trên cùng ổ đĩa)."""
     tmp = path.with_suffix(path.suffix + '.tmp')
     try:
-        with tmp.open('w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
-            f.flush()
-            os.fsync(f.fileno())
+        try:
+            import orjson
+            payload = orjson.dumps(data)
+            with tmp.open('wb') as f:
+                f.write(payload)
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception:
+            with tmp.open('w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+                f.flush()
+                os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception:
         # Dọn file tạm nếu ghi/replace thất bại để không để lại rác
@@ -463,10 +477,9 @@ def _convert_keyframe_item_value(op, item, canvas_cfg, seg, property_type, ops_c
         v = _clamp_position_norm_by_scale(v, scale)
     return v
 
-def apply_random_presets_to_file(path, base_args, presets, cancel_check=None):
+def apply_random_presets_to_draft_data(data, image_ids, video_ids, video_meta, photo_ids, base_args, presets, cancel_check=None):
     if not presets:
         return 0
-    data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
     tracks     = data.get('tracks') or []
     canvas_cfg = data.get('canvas_config') or {}
 
@@ -525,8 +538,16 @@ def apply_random_presets_to_file(path, base_args, presets, cancel_check=None):
                         'property_type': ptype
                     })
             changed += 1
+    return changed
 
-    if changed and not base_args.dry_run:
+def apply_random_presets_to_file(path, base_args, presets, cancel_check=None):
+    if not presets:
+        return 0
+    data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
+    changed = apply_random_presets_to_draft_data(
+        data, image_ids, video_ids, video_meta, photo_ids, base_args, presets, cancel_check=cancel_check
+    )
+    if changed and not getattr(base_args, 'dry_run', False):
         _save_draft(path, data)
     return changed
 
@@ -643,10 +664,9 @@ def _find_transition_template_in_root(root, target_name):
     return None
 
 
-def apply_random_transitions_to_file(path, base_args, transition_presets, cancel_check=None):
+def apply_random_transitions_to_draft_data(data, image_ids, video_ids, video_meta, photo_ids, base_args, transition_presets, cancel_check=None):
     if not transition_presets:
         return 0
-    data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
     mats        = data.setdefault('materials', {})
     transitions = mats.setdefault('transitions', [])
     trans_ids   = {t.get('id') for t in transitions if t.get('id')}
@@ -720,9 +740,42 @@ def apply_random_transitions_to_file(path, base_args, transition_presets, cancel
             trans_ids.add(tmat['id'])
             changed += 1
 
-    if changed and not base_args.dry_run:
+    return changed
+
+def apply_random_transitions_to_file(path, base_args, transition_presets, cancel_check=None):
+    if not transition_presets:
+        return 0
+    data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
+    changed = apply_random_transitions_to_draft_data(
+        data, image_ids, video_ids, video_meta, photo_ids, base_args, transition_presets, cancel_check=cancel_check
+    )
+    if changed and not getattr(base_args, 'dry_run', False):
         _save_draft(path, data)
     return changed
+
+def apply_batch_effects_to_file(path, base_args, keyframe_presets=None, transition_presets=None, cancel_check=None):
+    """Gom việc áp dụng keyframe và chuyển cảnh trong bộ nhớ, chỉ đọc và ghi file draft 1 lần duy nhất."""
+    if not keyframe_presets and not transition_presets:
+        return {"keyframes": 0, "transitions": 0}
+
+    data, image_ids, video_ids, video_meta, photo_ids = _load_draft(path)
+    kf_changed = 0
+    trans_changed = 0
+
+    if keyframe_presets:
+        kf_changed = apply_random_presets_to_draft_data(
+            data, image_ids, video_ids, video_meta, photo_ids, base_args, keyframe_presets, cancel_check=cancel_check
+        )
+
+    if transition_presets:
+        trans_changed = apply_random_transitions_to_draft_data(
+            data, image_ids, video_ids, video_meta, photo_ids, base_args, transition_presets, cancel_check=cancel_check
+        )
+
+    if (kf_changed or trans_changed) and not getattr(base_args, 'dry_run', False):
+        _save_draft(path, data, note="Sao lưu tự động trước khi thay đổi (Gộp Keyframe & Transition)")
+
+    return {"keyframes": kf_changed, "transitions": trans_changed}
 
 def apply_video_speed_to_file(path, base_args):
     mode  = str(getattr(base_args, 'video_speed_mode', 'speed')).lower()

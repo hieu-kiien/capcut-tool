@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import threading
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Callable, Optional, Tuple
@@ -89,8 +90,7 @@ class MediaProbeCache:
     def __init__(self, max_size: int = 1000):
         self._validate_max_size(max_size)
         self._max_size = max_size
-        self._cache: Dict[str, Tuple[int, int, MediaAsset]] = {}  # key: resolved_path (str), value: (size, mtime_ns, MediaAsset)
-        self._order: List[str] = []  # List of keys to keep track of insertion/access order for LRU
+        self._cache: OrderedDict[str, Tuple[int, int, MediaAsset]] = OrderedDict()
         self._pending: Dict[str, "_PendingProbe"] = {}
         self._lock = threading.Lock()
 
@@ -109,8 +109,7 @@ class MediaProbeCache:
         with self._lock:
             self._max_size = max_size
             while len(self._cache) > self._max_size:
-                oldest_key = self._order.pop(0)
-                self._cache.pop(oldest_key, None)
+                self._cache.popitem(last=False)
 
     def begin_probe(self, resolved_path: Path) -> Tuple["_PendingProbe", bool]:
         path_str = str(resolved_path)
@@ -160,14 +159,10 @@ class MediaProbeCache:
             if cached_size != size or cached_mtime_ns != mtime_ns:
                 # Mismatch: invalidate
                 self._cache.pop(path_str, None)
-                if path_str in self._order:
-                    self._order.remove(path_str)
                 return None
             
-            # Update order for LRU
-            if path_str in self._order:
-                self._order.remove(path_str)
-            self._order.append(path_str)
+            # Update order for LRU (O(1))
+            self._cache.move_to_end(path_str)
             return asset
 
     def set(self, resolved_path: Path, asset: MediaAsset) -> None:
@@ -186,28 +181,21 @@ class MediaProbeCache:
         path_str = str(resolved_path)
         with self._lock:
             if path_str in self._cache:
-                if path_str in self._order:
-                    self._order.remove(path_str)
+                self._cache.move_to_end(path_str)
             elif len(self._cache) >= self._max_size:
-                # Evict LRU element
-                if self._order:
-                    oldest_key = self._order.pop(0)
-                    self._cache.pop(oldest_key, None)
+                # Evict LRU element (O(1))
+                self._cache.popitem(last=False)
 
             self._cache[path_str] = (size, mtime_ns, asset)
-            self._order.append(path_str)
 
     def invalidate(self, resolved_path: Path) -> None:
         path_str = str(resolved_path)
         with self._lock:
             self._cache.pop(path_str, None)
-            if path_str in self._order:
-                self._order.remove(path_str)
 
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
-            self._order.clear()
 
 
 class _PendingProbe:
@@ -238,10 +226,22 @@ def iter_media_files(media_dir: str | Path, *, recursive: bool = False) -> Itera
     root = Path(media_dir)
     if not root.exists():
         raise FileNotFoundError(f"Media folder not found: {root}")
-    iterator = root.rglob("*") if recursive else root.iterdir()
-    for path in iterator:
-        if path.is_file() and is_supported_visual_file(path):
-            yield path
+    if recursive:
+        for dirpath, _, filenames in os.walk(root):
+            for fname in filenames:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in SUPPORTED_VISUAL_EXTENSIONS:
+                    yield Path(dirpath) / fname
+    else:
+        with os.scandir(root) as it:
+            for entry in it:
+                try:
+                    if entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in SUPPORTED_VISUAL_EXTENSIONS:
+                            yield Path(entry.path)
+                except OSError:
+                    continue
 
 
 def scan_media_folder(

@@ -1,3 +1,13 @@
+"""
+LEGACY BUILD SCRIPT (SUPERSEDED)
+================================
+Note: This packaging path has been superseded by the official release workflow:
+    powershell -ExecutionPolicy Bypass -File build_mvp.ps1
+which uses `capcut_mvp.spec` for production builds.
+
+This script is retained for historical reference and legacy compatibility testing.
+"""
+
 import argparse
 import shutil
 import subprocess
@@ -9,7 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Build CapCut Long Story Studio as a Windows EXE.")
+    print("[NOTE] scripts/build_exe.py is SUPERSEDED. The official production release path is 'build_mvp.ps1' (capcut_mvp.spec).")
+    parser = argparse.ArgumentParser(description="Build CapCut Long Story Studio as a Windows EXE (Legacy).")
     parser.add_argument("--check", action="store_true", help="Only check packaging prerequisites.")
     parser.add_argument("--name", default="CapCutLongStoryStudio")
     args = parser.parse_args(argv)
@@ -217,10 +228,7 @@ def build_pyinstaller_command(name: str) -> list[str]:
         "matplotlib",
         "torch",
         "triton",
-        "imageio",
-        "imageio_ffmpeg",
         "av",
-        "sqlite3",
         "tkinter",
         "PySide6.QtQuick",
         "PySide6.QtQml",

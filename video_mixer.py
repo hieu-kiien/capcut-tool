@@ -385,13 +385,16 @@ class _AssetPicker:
             self.bag = list(range(len(self.assets)))
             self.rng.shuffle(self.bag)
 
-        eligible = [idx for idx in self.bag if self._is_allowed(idx)]
-        if not eligible:
-            eligible = self.bag
+        if self._is_allowed(self.bag[-1]):
+            return self.bag.pop()
 
-        picked = eligible[-1]
-        self.bag.remove(picked)
-        return picked
+        # If the last item is not allowed (matches last_asset_index), find an allowed item and swap to end
+        for i in range(len(self.bag) - 2, -1, -1):
+            if self._is_allowed(self.bag[i]):
+                self.bag[i], self.bag[-1] = self.bag[-1], self.bag[i]
+                return self.bag.pop()
+
+        return self.bag.pop()
 
 
 def _pick_source_range(

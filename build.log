@@ -1,0 +1,180 @@
+Using Python: C:\Users\hieuk\AppData\Local\Programs\Python\Python313\python.exe
+CapCut Long Story Studio 0.1.0-mvp
+Python: 3.13.14
+Platform: Windows 10 (AMD64)
+
+[OK] source:app/gui.py: D:\1. LapTrinh\capcut tool\app\gui.py
+[OK] source:app/pipeline.py: D:\1. LapTrinh\capcut tool\app\pipeline.py
+[OK] source:capcut_draft_creator.py: D:\1. LapTrinh\capcut tool\capcut_draft_creator.py
+[OK] python_module:PySide6: available
+[OK] python_module:psutil: available
+[OK] python_module:pymediainfo: available
+[OK] app_data_writable: C:\Users\hieuk\AppData\Local\CapCut-Long-Story-Studio
+[OK] binary:ffmpeg: C:\Users\hieuk\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffmpeg.exe
+[OK] binary:ffprobe: C:\Users\hieuk\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffprobe.exe
+
+RESULT: READY
+320 INFO: PyInstaller: 6.20.0, contrib hooks: 2026.6
+321 INFO: Python: 3.13.14
+355 INFO: Platform: Windows-10-10.0.19045-SP0
+355 INFO: Python environment: C:\Users\hieuk\AppData\Local\Programs\Python\Python313
+361 INFO: Removing temporary files and cleaning cache in C:\Users\hieuk\AppData\Local\pyinstaller
+2793 INFO: Module search paths (PYTHONPATH):
+['D:\\1. LapTrinh\\capcut tool',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\python313.zip',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\DLLs',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib',
+ 'D:\\MovedFromC\\UserApps\\Python\\Python313',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\win32',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pythonwin',
+ 'D:\\1. LapTrinh\\capcut tool']
+4090 INFO: Appending 'datas' from .spec
+4100 INFO: checking Analysis
+4100 INFO: Building Analysis because Analysis-00.toc is non existent
+4100 INFO: Looking for Python shared library...
+4100 INFO: Using Python shared library: C:\Users\hieuk\AppData\Local\Programs\Python\Python313\python313.dll
+4100 INFO: Running Analysis Analysis-00.toc
+4100 INFO: Target bytecode optimization level: 1
+4100 INFO: Initializing module dependency graph...
+4103 INFO: Initializing module graph hook caches...
+4131 INFO: Analyzing modules for base_library.zip ...
+6085 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+6253 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+9251 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11261 INFO: Caching module dependency graph...
+11359 INFO: Analyzing D:\1. LapTrinh\capcut tool\main.py
+11435 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11503 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11513 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11563 INFO: Processing standard module hook 'hook-pymediainfo.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+11659 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11696 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+11701 INFO: Processing standard module hook 'hook-imageio_ffmpeg.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+12595 INFO: Processing standard module hook 'hook-PySide6.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+12928 INFO: Processing standard module hook 'hook-shiboken6.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+13213 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+16448 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+21103 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+25871 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+60087 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+60937 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+61041 INFO: Processing standard module hook 'hook-orjson.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+61073 INFO: Processing standard module hook 'hook-imageio.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+62386 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+62985 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+62988 INFO: SetuptoolsInfo: initializing cached setuptools info...
+64594 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+65990 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+69840 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+72001 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+72177 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+72830 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+73497 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+73971 INFO: Processing standard module hook 'hook-PySide6.QtSvg.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+75183 INFO: Processing standard module hook 'hook-PySide6.QtMultimedia.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+79689 INFO: Processing standard module hook 'hook-yt_dlp.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\yt_dlp\\__pyinstaller'
+295 WARNING: Failed to collect submodules for 'urllib3.contrib.emscripten' because importing 'urllib3.contrib.emscripten' raised: ModuleNotFoundError: No module named 'js'
+81627 WARNING: collect_data_files - skipping data collection for module 'curl_cffi' as it is not a package.
+81629 WARNING: collect_data_files - skipping data collection for module 'yt_dlp_ejs' as it is not a package.
+82330 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+82359 INFO: Processing standard module hook 'hook-websockets.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+83922 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+86826 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+87420 INFO: Processing standard module hook 'hook-bcrypt.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+88049 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+88208 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88209 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+88220 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+88241 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88292 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88293 INFO: Setuptools: 'jaraco' appears to be a partial setuptools-vendored copy - extending search paths to ['C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\jaraco', 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\setuptools\\_vendor\\jaraco']!
+88295 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88314 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88673 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88982 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+88983 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+89003 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+89005 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+89008 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+89291 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+89336 INFO: Processing standard module hook 'hook-importlib_metadata.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+89375 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+89778 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+89779 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+90572 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+90573 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+104819 INFO: Analyzing hidden import 'app.draft_cleanup'
+104830 INFO: Processing module hooks (post-graph stage)...
+105760 INFO: Processing standard module hook 'hook-lxml.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+106390 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+106395 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+106397 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+107431 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+107820 INFO: Processing standard module hook 'hook-av.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110312 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110357 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110416 WARNING: Hidden import "tzdata" not found!
+111036 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+111123 INFO: Processing standard module hook 'hook-PySide6.QtMultimediaWidgets.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+112878 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+113261 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+113292 INFO: Performing binary vs. data reclassification (1184 entries)
+113769 INFO: Looking for ctypes DLLs
+114085 INFO: Analyzing run-time hooks ...
+114096 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114101 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114106 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114109 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114111 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114113 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+114115 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+114118 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+114121 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+114190 INFO: Creating base_library.zip...
+114526 INFO: Looking for dynamic libraries
+118312 INFO: Extra DLL search directories (AddDllDirectory): ['D:\\MovedFromC\\UserApps\\Python\\Python313\\Lib\\site-packages\\shiboken6', 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\hieuk\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\av.libs']
+118312 INFO: Extra DLL search directories (PATH): ['D:\\MovedFromC\\UserApps\\Python\\Python313\\Lib\\site-packages\\PySide6']
+124485 INFO: Warnings written to D:\1. LapTrinh\capcut tool\build\capcut_mvp\warn-capcut_mvp.txt
+124703 INFO: Graph cross-reference written to D:\1. LapTrinh\capcut tool\build\capcut_mvp\xref-capcut_mvp.html
+124823 INFO: checking PYZ
+124823 INFO: Building PYZ because PYZ-00.toc is non existent
+124823 INFO: Building PYZ (ZlibArchive) D:\1. LapTrinh\capcut tool\build\capcut_mvp\PYZ-00.pyz
+133989 INFO: Building PYZ (ZlibArchive) D:\1. LapTrinh\capcut tool\build\capcut_mvp\PYZ-00.pyz completed successfully.
+134050 INFO: checking PKG
+134050 INFO: Building PKG because PKG-00.toc is non existent
+134050 INFO: Building PKG (CArchive) CapCutLongStoryStudio.pkg
+134102 INFO: Building PKG (CArchive) CapCutLongStoryStudio.pkg completed successfully.
+134103 INFO: Bootloader C:\Users\hieuk\AppData\Local\Programs\Python\Python313\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+134103 INFO: checking EXE
+134104 INFO: Building EXE because EXE-00.toc is non existent
+134104 INFO: Building EXE from EXE-00.toc
+134104 INFO: Copying bootloader EXE to D:\1. LapTrinh\capcut tool\build\capcut_mvp\CapCutLongStoryStudio.exe
+134163 INFO: Copying icon to EXE
+134221 INFO: Copying version information to EXE
+134282 INFO: Copying 0 resources to EXE
+134282 INFO: Embedding manifest in EXE
+134340 INFO: Appending PKG archive to EXE
+134545 INFO: Fixing EXE headers
+136665 INFO: Building EXE from EXE-00.toc completed successfully.
+136688 INFO: checking COLLECT
+136688 INFO: Building COLLECT because COLLECT-00.toc is non existent
+136689 INFO: Removing dir D:\1. LapTrinh\capcut tool\dist\CapCutLongStoryStudio
+137110 INFO: Building COLLECT COLLECT-00.toc
+141158 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+141196 INFO: Build complete! The results are available in: D:\1. LapTrinh\capcut tool\dist
+Adding imports: ['yt_dlp.compat._legacy', 'yt_dlp.compat._deprecated', 'yt_dlp.utils._legacy', 'yt_dlp.utils._deprecated', 'Cryptodome', 'websockets', 'websockets.__main__', 'websockets.asyncio', 'websockets.asyncio.async_timeout', 'websockets.asyncio.client', 'websockets.asyncio.compatibility', 'websockets.asyncio.connection', 'websockets.asyncio.messages', 'websockets.asyncio.router', 'websockets.asyncio.server', 'websockets.auth', 'websockets.cli', 'websockets.client', 'websockets.connection', 'websockets.datastructures', 'websockets.exceptions', 'websockets.extensions', 'websockets.extensions.base', 'websockets.extensions.permessage_deflate', 'websockets.frames', 'websockets.headers', 'websockets.http', 'websockets.http11', 'websockets.imports', 'websockets.legacy', 'websockets.legacy.auth', 'websockets.legacy.client', 'websockets.legacy.exceptions', 'websockets.legacy.framing', 'websockets.legacy.handshake', 'websockets.legacy.http', 'websockets.legacy.protocol', 'websockets.legacy.server', 'websockets.protocol', 'websockets.server', 'websockets.speedups', 'websockets.streams', 'websockets.sync', 'websockets.sync.client', 'websockets.sync.connection', 'websockets.sync.messages', 'websockets.sync.router', 'websockets.sync.server', 'websockets.sync.utils', 'websockets.typing', 'websockets.uri', 'websockets.utils', 'websockets.version', 'requests', 'requests.__version__', 'requests._internal_utils', 'requests._types', 'requests.adapters', 'requests.api', 'requests.auth', 'requests.certs', 'requests.compat', 'requests.cookies', 'requests.exceptions', 'requests.help', 'requests.hooks', 'requests.models', 'requests.packages', 'requests.sessions', 'requests.status_codes', 'requests.structures', 'requests.utils', 'urllib3', 'urllib3._base_connection', 'urllib3._collections', 'urllib3._request_methods', 'urllib3._version', 'urllib3.connection', 'urllib3.connectionpool', 'urllib3.contrib', 'urllib3.contrib.pyopenssl', 'urllib3.contrib.socks', 'urllib3.exceptions', 'urllib3.fields', 'urllib3.filepost', 'urllib3.http2', 'urllib3.http2.connection', 'urllib3.http2.probe', 'urllib3.poolmanager', 'urllib3.response', 'urllib3.util', 'urllib3.util.connection', 'urllib3.util.proxy', 'urllib3.util.request', 'urllib3.util.response', 'urllib3.util.retry', 'urllib3.util.ssl_', 'urllib3.util.ssl_match_hostname', 'urllib3.util.ssltransport', 'urllib3.util.timeout', 'urllib3.util.url', 'urllib3.util.util', 'urllib3.util.wait', 'mutagen', 'brotli', 'certifi', 'secretstorage', 'curl_cffi']
+
+Build completed: dist\CapCutLongStoryStudio\CapCutLongStoryStudio.exe
+Applying Authenticode Code Signature...
+====================================================
+ CapCut Studio Authenticode Code Signing Pipeline  
+====================================================
+Target: D:\1. LapTrinh\capcut tool\dist\CapCutLongStoryStudio\CapCutLongStoryStudio.exe
+Searching for available Code Signing certificates...
+Signing executable using certificate: CN=CapCutStudioDevCodeSign [26399EEAA8ECFE2FE65EF5A2FED79BB5D09479E6]...
+Signature Status: UnknownError
+Signer Certificate: CN=CapCutStudioDevCodeSign
+Authenticode Signature Applied Successfully!

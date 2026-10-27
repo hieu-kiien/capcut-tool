@@ -1,8 +1,10 @@
 [package]
-name = "capcut_long_story_studio"
-version = "2.0.0"
-description = "CapCut Long Story Studio PRO — High Performance Native Rust & Tauri v2 Desktop Engine"
-authors = ["Antigravity Senior Rust Architect"]
+name = "capcut_long_story_studio_tauri"
+version = "0.0.1-experimental"
+# Experimental R&D branch, not the release runtime. The shipping app is
+# Python/PySide6 at 0.1.0-mvp (see mvp_runtime/__init__.py). Exit criteria
+# for this branch are listed in PROJECT.md.
+description = "Experimental Rust/Tauri engine for CapCut Long Story Studio (not shipped)"
 edition = "2021"
 
 [build-dependencies]

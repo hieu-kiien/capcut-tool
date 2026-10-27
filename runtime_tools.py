@@ -60,6 +60,52 @@ def tool_first_line(executable: str) -> str:
         return ""
 
 
+def get_ffmpeg_license_info(executable: Optional[str] = None) -> dict:
+    """Inspects FFmpeg binary configuration to identify GPL vs LGPL licensing."""
+    exe = executable or resolve_ffmpeg()
+    if not exe:
+        return {"available": False, "is_lgpl": False, "license": "Unknown", "details": "FFmpeg not found"}
+
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        result = subprocess.run(
+            [exe, "-version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            check=False,
+            timeout=8,
+            creationflags=creationflags,
+        )
+        output = result.stdout or ""
+        is_gpl = "--enable-gpl" in output
+        is_version3 = "--enable-version3" in output
+        is_nonfree = "--enable-nonfree" in output
+
+        if is_nonfree:
+            lic = "Non-Free / Proprietary"
+        elif is_gpl:
+            lic = "GPL v3" if is_version3 else "GPL v2+"
+        else:
+            lic = "LGPL v3" if is_version3 else "LGPL v2.1+"
+
+        return {
+            "available": True,
+            "executable": exe,
+            "is_lgpl": not is_gpl and not is_nonfree,
+            "license": lic,
+            "details": output.splitlines()[0].strip() if output else ""
+        }
+    except Exception as e:
+        return {"available": False, "is_lgpl": False, "license": "Unknown", "details": str(e)}
+
+
+def is_ffmpeg_lgpl(executable: Optional[str] = None) -> bool:
+    """Returns True if the resolved FFmpeg executable is compliant with LGPL (non-GPL)."""
+    return get_ffmpeg_license_info(executable).get("is_lgpl", False)
+
+
 def pymediainfo_available() -> bool:
     try:
         import pymediainfo

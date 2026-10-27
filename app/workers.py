@@ -332,8 +332,28 @@ class ScanWorker(QObject):
             image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 
             thread = QThread.currentThread()
-            iterator = self.directory.rglob("*") if self.recursive else self.directory.iterdir()
-            for p in iterator:
+            
+            def _iter_items():
+                if self.recursive:
+                    for dirpath, _, filenames in os.walk(self.directory):
+                        for fname in filenames:
+                            full_path = os.path.join(dirpath, fname)
+                            try:
+                                st = os.stat(full_path)
+                                yield fname, True, st.st_size, dirpath
+                            except OSError:
+                                yield fname, False, 0, dirpath
+                else:
+                    with os.scandir(self.directory) as it:
+                        for entry in it:
+                            try:
+                                is_f = entry.is_file()
+                                sz = entry.stat().st_size if is_f else 0
+                                yield entry.name, is_f, sz, str(self.directory)
+                            except OSError:
+                                yield entry.name, False, 0, str(self.directory)
+
+            for name, is_file, size, folder in _iter_items():
                 if self.cancel_requested or thread.isInterruptionRequested():
                     self.finished.emit({
                         "scan_id": self.scan_id,
@@ -345,38 +365,31 @@ class ScanWorker(QObject):
                         "cancelled": True,
                     })
                     return
-                try:
-                    is_file = p.is_file()
-                except OSError:
+
+                if not is_file:
                     other_count += 1
                     continue
 
-                if is_file:
-                    ext = p.suffix.lower()
-                    try:
-                        size = p.stat().st_size
-                    except OSError:
-                        other_count += 1
-                        continue
-                    total_size += size
-                    if ext in video_exts:
-                        video_count += 1
-                        media_type = "Video"
-                    elif ext in image_exts:
-                        image_count += 1
-                        media_type = "Ảnh"
-                    else:
-                        other_count += 1
-                        media_type = "Khác"
-                    if media_type != "Khác" and len(samples) < 20:
-                        samples.append(
-                            {
-                                "name": p.name,
-                                "type": media_type,
-                                "size": size,
-                                "folder": str(p.parent),
-                            }
-                        )
+                ext = os.path.splitext(name)[1].lower()
+                total_size += size
+                if ext in video_exts:
+                    video_count += 1
+                    media_type = "Video"
+                elif ext in image_exts:
+                    image_count += 1
+                    media_type = "Ảnh"
+                else:
+                    other_count += 1
+                    media_type = "Khác"
+                if media_type != "Khác" and len(samples) < 20:
+                    samples.append(
+                        {
+                            "name": name,
+                            "type": media_type,
+                            "size": size,
+                            "folder": folder,
+                        }
+                    )
 
             self.finished.emit({
                 "scan_id": self.scan_id,

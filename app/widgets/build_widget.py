@@ -38,7 +38,7 @@ class BuildWidget(QWidget):
         self.step_widgets = {}
         self.step_labels = {}
         self.step_status_labels = {}
-        self.step_codes = ["validate", "scan", "allocate", "timeline", "write", "complete"]
+        self.step_codes = ["preflight", "scan_media", "plan_media", "write_draft"]
         
         self.preflight_widgets = {}
         self.preflight_value_labels = {}
@@ -269,12 +269,10 @@ class BuildWidget(QWidget):
         stepper_layout.setSpacing(6)
 
         step_labels_map = {
-            "validate": "1. Xác thực đầu vào",
-            "scan": "2. Quét media",
-            "allocate": "3. Phân bổ media",
-            "timeline": "4. Tạo timeline",
-            "write": "5. Ghi draft",
-            "complete": "6. Hoàn tất"
+            "preflight": "1. Kiểm tra đầu vào",
+            "scan_media": "2. Quét kho media",
+            "plan_media": "3. Phân bổ video nền",
+            "write_draft": "4. Tạo dự án CapCut",
         }
 
         for code in self.step_codes:
@@ -356,6 +354,8 @@ class BuildWidget(QWidget):
         self.manager.job_added.connect(self._on_job_added)
         self.manager.job_started.connect(self._on_job_started)
         self.manager.job_progress.connect(self._on_job_progress)
+        self.manager.job_step_changed.connect(self._on_job_step_changed)
+        self.manager.step_changed.connect(self._on_step_changed)
         self.manager.job_finished.connect(self._on_job_finished)
         self.manager.job_log_appended.connect(self._on_job_log_appended)
         self.manager.queue_status_changed.connect(self._on_queue_status_changed)
@@ -426,6 +426,16 @@ class BuildWidget(QWidget):
             self._update_stepper_ui(progress_val, "running", message)
             self._update_global_progress()
 
+    @Slot(str, str, str, str)
+    def _on_job_step_changed(self, job_id: str, code: str, status: str, message: str) -> None:
+        if self.selected_job_id == job_id or (self.selected_job_id is None and job_id == self.manager.current_job_id):
+            self.update_step_widget(code, status, message)
+
+    @Slot(str, str, str)
+    def _on_step_changed(self, code: str, status: str, message: str) -> None:
+        if self.selected_job_id is None or self.selected_job_id == self.manager.current_job_id:
+            self.update_step_widget(code, status, message)
+
     @Slot(str, str, str)
     def _on_job_finished(self, job_id: str, status: str, error_message: str) -> None:
         self.refresh_queue_table()
@@ -477,11 +487,18 @@ class BuildWidget(QWidget):
         self.queue_table.setRowCount(0)
         
         status_translation = {
-            "pending": "⏳ Chờ",
-            "running": "🔵 Dựng...",
-            "completed": "✅ Xong",
-            "failed": "❌ Lỗi",
-            "cancelled": "⚪ Hủy"
+            "pending": "Chờ",
+            "running": "Dựng...",
+            "completed": "Xong",
+            "failed": "Lỗi",
+            "cancelled": "Hủy"
+        }
+        status_icons = {
+            "pending": ("clock", "#94a3b8"),
+            "running": ("refresh", "#00F2FE"),
+            "completed": ("check", "#22c55e"),
+            "failed": ("x", "#ef4444"),
+            "cancelled": ("stop", "#64748b"),
         }
 
         self.queue_count_lbl.setText(f"({len(self.manager.jobs)})")
@@ -496,6 +513,9 @@ class BuildWidget(QWidget):
             status_text = status_translation.get(job.status, job.status)
             status_item = QTableWidgetItem(status_text)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_info = status_icons.get(job.status)
+            if icon_info:
+                status_item.setIcon(get_svg_icon(icon_info[0], icon_info[1], 14))
             self.queue_table.setItem(idx, 1, status_item)
 
             progress_item = QTableWidgetItem(f"{job.progress}%")
@@ -538,8 +558,6 @@ class BuildWidget(QWidget):
             self._select_job(job_id)
 
     def _select_job(self, job_id: str) -> None:
-        self.selected_job_id = job_id
-        
         job = None
         for j in self.manager.jobs:
             if j.id == job_id:
@@ -549,11 +567,27 @@ class BuildWidget(QWidget):
         if not job:
             return
 
+        self.selected_job_id = job_id
+
         self.active_job_title.setText(f"Tiến Trình: {job.project_name}")
         self.log_title.setText(f"Nhật Ký: {job.project_name}")
 
         self._update_preflight_for_job(job)
-        self._update_stepper_ui(job.progress, job.status, job.error_message or "")
+        if hasattr(job, "step_states") and job.step_states:
+            for code in self.step_codes:
+                st = job.step_states.get(code, "pending")
+                msg = ""
+                if st == "running":
+                    msg = "Đang xử lý..."
+                elif st == "done":
+                    msg = "Hoàn thành"
+                elif st in ("error", "cancelled"):
+                    msg = job.error_message or "Thất bại/Bị hủy"
+                elif st == "pending":
+                    msg = "Đang chờ..."
+                self.update_step_widget(code, st, msg)
+        else:
+            self._update_stepper_ui(job.progress, job.status, job.error_message or "")
 
         self.log_terminal.clear()
         for line in job.logs:
@@ -582,23 +616,23 @@ class BuildWidget(QWidget):
 
         if "[LỖI]" in text or "[ERROR]" in text:
             color  = "#ff6b6b"
-            prefix = "❌"
+            prefix = "[LỖI]"
             weight = "bold"
         elif "[OK]" in text or "[THÀNH CÔNG]" in text or "[SUCCESS]" in text:
             color  = "#4ade80"
-            prefix = "✅"
+            prefix = "[OK]"
             weight = "bold"
         elif "[CẢNH BÁO]" in text or "[WARNING]" in text or "[WARN]" in text:
             color  = "#fbbf24"
-            prefix = "⚠️"
+            prefix = "[CẢNH BÁO]"
             weight = "bold"
         elif "[HỆ THỐNG]" in text:
             color  = "#c084fc"
-            prefix = "⚙️"
+            prefix = "[HỆ THỐNG]"
             weight = "normal"
         elif "[ĐANG" in text or "[INFO]" in text:
             color  = "#60a5fa"
-            prefix = "ℹ️"
+            prefix = "[THÔNG TIN]"
             weight = "normal"
         else:
             color  = "#cbd5e1"
@@ -628,14 +662,15 @@ class BuildWidget(QWidget):
         
         circle = widget.findChild(QLabel, "stepCircle")
         if circle:
+            circle.setText("")
             if status == "pending":
-                circle.setText("")
+                circle.clear()
             elif status == "running":
-                circle.setText("⏳")
+                circle.setPixmap(get_svg_icon("refresh", "#00F2FE", 14).pixmap(14, 14))
             elif status == "done":
-                circle.setText("✓")
-            elif status == "error":
-                circle.setText("✗")
+                circle.setPixmap(get_svg_icon("check", "#22c55e", 14).pixmap(14, 14))
+            elif status in ("error", "cancelled"):
+                circle.setPixmap(get_svg_icon("x", "#ef4444", 14).pixmap(14, 14))
                 
         status_lbl = self.step_status_labels.get(code)
         if status_lbl:
@@ -645,7 +680,7 @@ class BuildWidget(QWidget):
                 status_lbl.setText(message or "Đang xử lý...")
             elif status == "done":
                 status_lbl.setText(message or "Hoàn thành")
-            elif status == "error":
+            elif status in ("error", "cancelled"):
                 status_lbl.setText(message or "Lỗi!")
 
     def _get_step_states(self, progress: int, status: str) -> dict:
@@ -653,52 +688,43 @@ class BuildWidget(QWidget):
         
         if status == "completed":
             return {code: "done" for code in self.step_codes}
-        elif status == "cancelled" or status == "failed":
-            # Guess fail/cancel state based on progress
-            if progress == 0:
-                states["validate"] = "error"
-            elif progress == 25:
-                states["validate"] = "done"
-                states["scan"] = "error"
-            elif progress == 50:
-                states["validate"] = "done"
-                states["scan"] = "done"
-                states["allocate"] = "error"
-            elif progress == 75:
-                states["validate"] = "done"
-                states["scan"] = "done"
-                states["allocate"] = "done"
-                states["timeline"] = "done"
-                states["write"] = "error"
+        elif status in ("cancelled", "failed"):
+            err_state = "cancelled" if status == "cancelled" else "error"
+            if progress < 25:
+                states["preflight"] = err_state
+            elif progress < 50:
+                states["preflight"] = "done"
+                states["scan_media"] = err_state
+            elif progress < 75:
+                states["preflight"] = "done"
+                states["scan_media"] = "done"
+                states["plan_media"] = err_state
             else:
-                states["validate"] = "done"
-                states["scan"] = "done"
-                states["allocate"] = "done"
-                states["timeline"] = "done"
-                states["write"] = "done"
-                states["complete"] = "error"
+                states["preflight"] = "done"
+                states["scan_media"] = "done"
+                states["plan_media"] = "done"
+                states["write_draft"] = err_state
             return states
             
         if status == "pending":
             return states
             
         # status == "running"
-        if progress == 0:
-            states["validate"] = "running"
-        elif progress == 25:
-            states["validate"] = "done"
-            states["scan"] = "running"
-        elif progress == 50:
-            states["validate"] = "done"
-            states["scan"] = "done"
-            states["allocate"] = "running"
-        elif progress == 75:
-            states["validate"] = "done"
-            states["scan"] = "done"
-            states["allocate"] = "done"
-            states["timeline"] = "done"
-            states["write"] = "running"
-        elif progress == 100:
+        if progress < 25:
+            states["preflight"] = "running"
+        elif progress < 50:
+            states["preflight"] = "done"
+            states["scan_media"] = "running"
+        elif progress < 75:
+            states["preflight"] = "done"
+            states["scan_media"] = "done"
+            states["plan_media"] = "running"
+        elif progress < 100:
+            states["preflight"] = "done"
+            states["scan_media"] = "done"
+            states["plan_media"] = "done"
+            states["write_draft"] = "running"
+        else:
             for c in self.step_codes:
                 states[c] = "done"
         return states
@@ -858,14 +884,15 @@ class BuildWidget(QWidget):
         
         circle = widget.findChild(QLabel, "stepCircle")
         if circle:
+            circle.setText("")
             if status == "pending":
-                circle.setText("")
+                circle.clear()
             elif status == "running":
-                circle.setText("⚠️")
+                circle.setPixmap(get_svg_icon("alert", "#eab308", 14).pixmap(14, 14))
             elif status == "done":
-                circle.setText("✓")
-            elif status == "error":
-                circle.setText("✗")
+                circle.setPixmap(get_svg_icon("check", "#22c55e", 14).pixmap(14, 14))
+            elif status in ("error", "cancelled"):
+                circle.setPixmap(get_svg_icon("x", "#ef4444", 14).pixmap(14, 14))
                 
         status_lbl = self.preflight_value_labels.get(code)
         if status_lbl:
@@ -873,13 +900,12 @@ class BuildWidget(QWidget):
 
     def shutdown(self, wait_ms: int = 5000) -> bool:
         """
-        Cleanly requests shutdown of active build queue jobs.
+        Cleanly requests shutdown of active build queue jobs and worker threads.
         Returns True if safe to close, False otherwise.
         """
         try:
             from app.queue_manager import BatchQueueManager
-            BatchQueueManager.get_instance().cancel_current_job()
-            return True
+            return BatchQueueManager.get_instance().shutdown(wait_ms=wait_ms)
         except Exception as e:
             print(f"Error during BuildWidget shutdown: {e}")
             return True

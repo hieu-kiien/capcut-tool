@@ -19,7 +19,7 @@ Below is a curated index of critical entry points and core backend files that an
 *   **[app/pipeline.py](file:///D:/1.%20LapTrinh/capcut%20tool/app/pipeline.py)**: The orchestration pipeline. Directs preflight checks, folder scans, visual mixes, draft builds, and effect injection.
 *   **[capcut_draft_creator.py](file:///D:/1.%20LapTrinh/capcut%20tool/capcut_draft_creator.py)**: Core draft folder builder. Configures resource registries and overlay overlays.
 *   **[capcut_keyframe_tool.py](file:///D:/1.%20LapTrinh/capcut%20tool/capcut_keyframe_tool.py)**: Core JSON timeline injector. Modifies keyframe coordinate tracks and transition segments.
-*   **[app/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/app/path_validation.py)**: Essential security filter. Prevents directory traversal attacks in project directory parameters.
+*   **[core/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/core/path_validation.py)**: Essential security filter. Prevents directory traversal attacks in project directory parameters.
 *   **[app/draft_lock.py](file:///D:/1.%20LapTrinh/capcut%20tool/app/draft_lock.py)**: Essential file locker. Prevents concurrent processes from modifying CapCut JSON timelines simultaneously.
 
 ---
@@ -54,7 +54,7 @@ AI Agents and developers must adhere to the following workflow sequence:
 *   **Rule**: Always wrap operations modifying draft folders inside the `locked_draft()` context manager.
 
 ### B. Enforce Path Validation [Rank: High]
-*   **Target File**: [app/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/app/path_validation.py)
+*   **Target File**: [core/path_validation.py](file:///D:/1.%20LapTrinh/capcut%20tool/core/path_validation.py)
 *   **Context**: All project files are created relative to the user's CapCut draft directory.
 *   **Rule**: Any new interface options or backend functions resolving user-provided project name inputs MUST validate them using `validate_project_name()`.
 

@@ -353,7 +353,7 @@ class DashboardWidget(QWidget):
         self.btn_build_draft.setCursor(Qt.PointingHandCursor)
         self.btn_build_draft.setStyleSheet(f"""
             QPushButton {{
-                background-color: rgba(13, 211, 186, 0.05);
+                background-color: rgba(0, 242, 254, 0.08);
                 border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 10px;
                 color: {COLOR_TEAL};
@@ -707,7 +707,7 @@ class DashboardWidget(QWidget):
             QApplication.clipboard().setText(text)
             try:
                 from app.widgets.toast import ToastManager
-                ToastManager.get_instance().show(self, "Đã sao chép ✨", "Toàn bộ nhật ký đã được chép vào bộ nhớ tạm.", level="success")
+                ToastManager.get_instance().show(self, "Đã sao chép", "Toàn bộ nhật ký đã được chép vào bộ nhớ tạm.", level="success")
             except Exception:
                 pass
 

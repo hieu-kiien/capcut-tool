@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 from app.icons import get_svg_icon
+from app.theme import DARK_BG
+from app.widgets.setup_widget import DropLineEdit
 from app.presets import KEYFRAME_PRESETS, TRANSITION_PRESETS, load_all_presets, add_custom_preset, delete_custom_preset
 
 class EffectsWidget(QWidget):
@@ -77,7 +79,7 @@ class EffectsWidget(QWidget):
         self.logo_preview_container.setMinimumHeight(80)
         self.logo_preview_container.setStyleSheet("""
             QFrame#previewContainer {
-                background-color: #0c0f17;
+                background-color: #121214;
                 border: 1px dashed rgba(255, 255, 255, 0.08);
                 border-radius: 6px;
             }
@@ -89,8 +91,7 @@ class EffectsWidget(QWidget):
         logo_preview_vbox.addWidget(self.logo_preview_label)
         logo_layout.addWidget(self.logo_preview_container)
 
-        self.logo_path = QLineEdit()
-        self.logo_path.setPlaceholderText("Chọn hình ảnh logo (.png, .jpg)...")
+        self.logo_path = DropLineEdit("Chọn hình ảnh logo (.png, .jpg)...")
         self.logo_path.textChanged.connect(self._update_logo_preview)
         logo_layout.addWidget(self._create_field_label("Tệp hình ảnh Logo (Logo - Tùy chọn)"))
         logo_layout.addLayout(self._create_path_row(self.logo_path, "image"))
@@ -141,7 +142,7 @@ class EffectsWidget(QWidget):
         self.anim_preview_container.setMinimumHeight(80)
         self.anim_preview_container.setStyleSheet("""
             QFrame#previewContainer {
-                background-color: #0c0f17;
+                background-color: #121214;
                 border: 1px dashed rgba(255, 255, 255, 0.08);
                 border-radius: 6px;
             }
@@ -153,8 +154,7 @@ class EffectsWidget(QWidget):
         anim_preview_vbox.addWidget(self.anim_preview_label)
         anim_layout.addWidget(self.anim_preview_container)
 
-        self.anim_path = QLineEdit()
-        self.anim_path.setPlaceholderText("Chọn video hoạt ảnh Subscribe/Like (.mp4, .mov)...")
+        self.anim_path = DropLineEdit("Chọn video hoạt ảnh Subscribe/Like (.mp4, .mov)...")
         self.anim_path.textChanged.connect(self._update_anim_preview)
         anim_layout.addWidget(self._create_field_label("Tệp hoạt ảnh Subscribe/Like (Tùy chọn)"))
         anim_layout.addLayout(self._create_path_row(self.anim_path, "video"))

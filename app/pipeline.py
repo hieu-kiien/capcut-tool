@@ -160,12 +160,11 @@ class PipelineRunner:
                     def __init__(self, **kwargs):
                         self.__dict__.update(kwargs)
                 
-                # 1. Auto Keyframe
+                # Prepare Keyframe Presets
+                presets_to_apply = []
                 auto_kf = self.config.auto_keyframe
                 if auto_kf and auto_kf != "none":
-                    raise_if_cancelled(cancel_check)
                     self._emit(progress, f"[HỆ THỐNG] Tự động áp dụng hiệu ứng keyframe: {auto_kf}")
-                    presets_to_apply = []
                     if auto_kf == "random":
                         presets_to_apply = KEYFRAME_PRESETS
                     else:
@@ -173,42 +172,43 @@ class PipelineRunner:
                             if p["id"] == auto_kf:
                                 presets_to_apply = [p]
                                 break
-                                
-                    if presets_to_apply:
-                        args = DummyArgs(
-                            segment_type="video",
-                            mode="replace",
-                            dry_run=False,
-                            intro_path=self.config.intro_path,
-                            outro_path=self.config.outro_path
-                        )
-                        changed = kt.apply_random_presets_to_file(draft_path, args, presets_to_apply, cancel_check=cancel_check)
-                        self._emit(progress, f"[OK] Đã tự động áp dụng keyframe cho {changed} phân đoạn.")
-                
-                # 2. Auto Transition
+
+                # Prepare Transition Presets
+                transition_presets = []
                 auto_trans = self.config.auto_transition
                 if auto_trans and auto_trans != "none":
-                    raise_if_cancelled(cancel_check)
                     self._emit(progress, f"[HỆ THỐNG] Tự động áp dụng hiệu ứng chuyển cảnh: {auto_trans}")
                     duration_us = int(self.config.auto_transition_duration * 1_000_000)
                     if auto_trans == "random":
                         transition_presets = [{"name": p["name"], "duration": p["duration"]} for p in TRANSITION_PRESETS]
                     else:
                         transition_presets = [{"name": auto_trans, "duration": duration_us}]
-                        
-                    root_dir = draft_path.parents[1]
-                    args = DummyArgs(
-                        root=root_dir,
-                        transition_duration_sec=self.config.auto_transition_duration,
-                        transition_apply_all=False,
-                        segment_type="video",
-                        mode="replace",
-                        dry_run=False,
-                        intro_path=self.config.intro_path,
-                        outro_path=self.config.outro_path
+
+                root_dir = draft_path.parents[1]
+                args = DummyArgs(
+                    root=root_dir,
+                    transition_duration_sec=self.config.auto_transition_duration,
+                    transition_apply_all=False,
+                    segment_type="video",
+                    mode="replace",
+                    dry_run=False,
+                    intro_path=self.config.intro_path,
+                    outro_path=self.config.outro_path
+                )
+
+                if presets_to_apply or transition_presets:
+                    raise_if_cancelled(cancel_check)
+                    results = kt.apply_batch_effects_to_file(
+                        draft_path,
+                        args,
+                        keyframe_presets=presets_to_apply,
+                        transition_presets=transition_presets,
+                        cancel_check=cancel_check
                     )
-                    changed = kt.apply_random_transitions_to_file(draft_path, args, transition_presets, cancel_check=cancel_check)
-                    self._emit(progress, f"[OK] Đã tự động chèn chuyển cảnh thành công cho {changed} điểm cắt.")
+                    if presets_to_apply:
+                        self._emit(progress, f"[OK] Đã tự động áp dụng keyframe cho {results.get('keyframes', 0)} phân đoạn.")
+                    if transition_presets:
+                        self._emit(progress, f"[OK] Đã tự động chèn chuyển cảnh thành công cho {results.get('transitions', 0)} điểm cắt.")
             except Exception as e:
                 if isinstance(e, JobCancelled):
                     raise
